@@ -23,11 +23,18 @@ Roughly in the order the design implies:
   panel, status bar, themes.
 - **More decompilers.** Only `jadx` is registered. Vineflower, CFR and Procyon
   are planned (the brand mark depicts four). Implement `Backend`, then register it in `Sessions`.
+  Note: those three read only JVM `.class` files, so APK/DEX input needs a
+  DEX→class step first (e.g. dex2jar), run once per file. Class ids must match JADX's.
 - **Engine features** the UI will need: smali output, control-flow graph,
   cross-references, string search, manifest and resources, renames and comments.
 - **Inputs:** AAB is rejected with an explicit "not supported yet" error.
   Loose smali files aren't accepted as input. The root README advertises both.
 - Packaging, releases and CI: nothing set up yet.
+
+## Design
+
+- Start screen: approved mockup in `design/start-mockup.html` (2026-10-01), not implemented yet.
+- Main workbench: `design/mockup.html` + `design/DESIGN.md`, not implemented yet.
 
 ## Repo state
 

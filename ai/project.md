@@ -2,8 +2,10 @@
 
 **JReverse** is a desktop reverse-engineering workbench for Java and Android.
 Open an APK/JAR/AAR/DEX/class file, browse classes, read decompiled source.
-The long-term goal is several decompilers side by side (Vineflower, JADX,
-CFR, Procyon) in a keyboard-first UI modelled on Binary Ninja and jadx-gui.
+The goal is a keyboard-first workbench modelled on Binary Ninja and
+jadx-gui. Supporting several decompilers (Vineflower, JADX, CFR, Procyon) and
+switching between or comparing them is **one feature among many, not the core
+of the product** (owner, 2026-10-01). Don't let it drive priorities.
 
 Solo-owner project (GitHub user HexDump0), package `io.github.hexdump0.jreverse`.
 
