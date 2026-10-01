@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "io.github.hexdump0.jreverse",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm engine && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm engine && pnpm build",
     "frontendDist": "../build"
   },
   "app": {
@@ -36,6 +36,9 @@
       "icons/icon.ico"
     ],
     "category": "DeveloperTool",
-    "shortDescription": "Reverse engineering workbench for Java and Android"
+    "shortDescription": "Reverse engineering workbench for Java and Android",
+    "resources": {
+      "engine-dist/": "engine/"
+    }
   }
 }

@@ -1,14 +1,49 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+mod commands;
+pub mod engine;
+
+use std::sync::Arc;
+
+use tauri::{Emitter, Manager, RunEvent};
+
+use engine::{Engine, EngineEvent, EventSink, Launch};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new().level(log::LevelFilter::Info).build())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let launch = Launch::resolve(app.path().resource_dir().ok().as_deref());
+            match &launch {
+                Ok(l) => log::info!("engine: {} -jar {}", l.java.display(), l.jar.display()),
+                Err(e) => log::error!("{e}"),
+            }
+            let handle = app.handle().clone();
+            let sink: EventSink = Arc::new(move |event| match event {
+                EngineEvent::Log(line) => {
+                    log::info!(target: "engine", "{line}");
+                    let _ = handle.emit("engine://log", line);
+                }
+                EngineEvent::Status(status) => {
+                    let _ = handle.emit("engine://status", status);
+                }
+            });
+            app.manage(Engine::from_launch(launch, sink));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::open_file,
+            commands::list_classes,
+            commands::decompile_class,
+            commands::close_session,
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app, event| {
+        if let RunEvent::Exit = event {
+            tauri::async_runtime::block_on(app.state::<Engine>().shutdown());
+        }
+    });
 }
