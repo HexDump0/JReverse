@@ -12,6 +12,11 @@ vite.config.ts.timestamp-*
 /src-tauri/target/
 /src-tauri/gen/schemas/
 
+# Engine (JVM) build output
+/engine/build/
+/engine/.gradle/
+/src-tauri/engine-dist/
+
 # Environment
 .env
 .env.*
