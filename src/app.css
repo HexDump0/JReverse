@@ -1,0 +1,31 @@
+/* Theme tokens from design/DESIGN.md (default "JReverse" theme). */
+:root {
+  --ground: #17191a;
+  --side: #141617;
+  --head: #17191a;
+  --pane: #101213;
+  --line: #1f2224;
+  --line-2: #2b2e30;
+  --curline: #1d2020;
+  --text: #e6e2de;
+  --muted: #9a948d;
+  --faint: #67625c;
+  --gutter: #4a4743;
+  --accent: #a4b7f1;
+  --sel: color-mix(in srgb, var(--accent) 16%, transparent);
+  --warn: #f1e672;
+  --error: #f17b71;
+
+  --font-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  color-scheme: dark;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--pane);
+}
+
+* {
+  box-sizing: border-box;
+}
