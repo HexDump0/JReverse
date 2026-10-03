@@ -23,6 +23,8 @@
     recents: RecentView[];
     /** The bundled example app, offered on first run. */
     example: { path: string; peek: Peek } | null;
+    /** Where the Continue file was left: the class in its active tab, and how many notes it has. */
+    resume: { path: string; at: string | null; notes: number } | null;
     home: string | null;
     /** The file just dropped or picked, shown under the beam. */
     readout: Peek | null;
@@ -43,6 +45,7 @@
   let {
     recents,
     example,
+    resume,
     home,
     readout,
     opening,
@@ -262,6 +265,7 @@
     {#if entries.length}
       {@const first = entries[0]}
       {@const ex = isExample(first)}
+      {@const left = resume?.path === first.path ? resume : null}
       <div
         class="cont"
         class:sel={sel === 0}
@@ -279,6 +283,10 @@
         <div class="c-name">{baseName(first.path)}</div>
         <div class="c-id" title={first.path}>
           <Dots parts={[!ex && dirOf(first), first.classCount > 0 && `${fmtN(first.classCount)} classes`]} />
+        </div>
+        <div class="c-at">
+          {#if left?.at}<span>Last in <b>{left.at}</b></span>{/if}
+          {#if left?.notes}<span>{left.notes} {left.notes === 1 ? "note" : "notes"}</span>{/if}
         </div>
         <div class="c-foot">
           {#if isLoading(first)}
@@ -570,6 +578,20 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .c-at {
+    display: flex;
+    gap: 18px;
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--text-3);
+  }
+  .c-at:empty {
+    display: none;
+  }
+  .c-at b {
+    font-weight: 500;
+    color: var(--text-2);
   }
   .c-foot {
     display: flex;

@@ -10,6 +10,7 @@
     exampleFile,
     forgetRecent,
     listClasses,
+    loadProject,
     onEngineLog,
     onEngineStatus,
     openFile,
@@ -29,7 +30,7 @@
   import StartScreen from "$lib/start/StartScreen.svelte";
   import Onboarding, { onboarded } from "$lib/start/Onboarding.svelte";
   import Workbench from "$lib/workbench/Workbench.svelte";
-  import { Workspace } from "$lib/workbench/workspace.svelte";
+  import { simpleName, Workspace } from "$lib/workbench/workspace.svelte";
 
   const MAX_LOG = 500;
   /** `VITE_FIRST_RUN=1` shows onboarding on every launch and hides recent files, as a new user sees it. */
@@ -42,6 +43,7 @@
   let recents = $state<RecentView[]>([]);
   let home = $state<string | null>(null);
   let example = $state<{ path: string; peek: Peek } | null>(null);
+  let resume = $state<{ path: string; at: string | null; notes: number } | null>(null);
   let ws = $state<Workspace | null>(null);
   let workbench = $state<Workbench>();
   let readout = $state<Peek | null>(null);
@@ -66,10 +68,21 @@
 
   async function refreshRecents() {
     recents = await recentFiles();
+    loadResume(recents[0]);
     if (!example) {
       const path = await exampleFile();
       if (path) example = { path, peek: await peekFile(path) };
     }
+  }
+
+  // What the Continue card resumes into, from the file's saved project.
+  async function loadResume(r: RecentView | undefined) {
+    if (!r || r.missing) return (resume = null);
+    const p = await loadProject(r.path).catch(() => null);
+    if (!p) return (resume = null);
+    const cls = p.active?.startsWith("class:") ? p.active.slice(6) : null;
+    const notes = Object.keys(p.renames).length + Object.keys(p.comments).length + p.bookmarks.length;
+    resume = { path: r.path, at: cls ? (p.renames[cls] ?? simpleName(cls)) : null, notes };
   }
 
   async function browse() {
@@ -286,6 +299,7 @@
     <StartScreen
       recents={FIRST_RUN ? [] : recents}
       {example}
+      {resume}
       {home}
       {readout}
       opening={opening && { path: opening.path, peek: opening.peek, text: openingText }}
@@ -309,7 +323,7 @@
   {/if}
 
   {#if !onboarding}
-    <StatusBar {logOpen} ontogglelog={() => (logOpen = !logOpen)} />
+    <StatusBar {logOpen} ontogglelog={() => (logOpen = !logOpen)} where={ws && workbench ? workbench.where() : []} />
   {/if}
 </div>
 

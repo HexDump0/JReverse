@@ -8,7 +8,7 @@
   import { cancelJob, errorMessage, exportSources, isNameHit, onEngineProgress, writeTextFile, type NodeInfo, type SearchHit, type Usage } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
   import { fmtN } from "$lib/format";
-  import { say, setTask, setWhere } from "$lib/status.svelte";
+  import { say, setTask } from "$lib/status.svelte";
   import type { Menu, MenuItem } from "$lib/shell/AppBar.svelte";
   import ContextMenu from "$lib/shell/ContextMenu.svelte";
   import Prompt, { type PromptRequest } from "$lib/shell/Prompt.svelte";
@@ -69,17 +69,16 @@
 
   untrack(() => ws.restore());
 
-  // Status bar: where the caret is, and how this class came out.
-  $effect(() => {
-    if (!doc || tab.kind === "overview") return setWhere([]);
+  /** For the status bar: where the caret is, and how this class came out. */
+  export function where(): string[] {
+    if (!doc || tab.kind === "overview") return [];
     const parts = [`Ln ${tab.caret.line + 1}, Col ${tab.caret.col + 1}`];
     if (tab.kind === "class" && tab.view === "java") {
       if (doc.warnings) parts.push(`${doc.warnings} ${doc.warnings === 1 ? "warning" : "warnings"}`);
       parts.push(`${doc.engine} ${doc.ms} ms`);
     }
-    setWhere(parts);
-  });
-  $effect(() => () => setWhere([]));
+    return parts;
+  }
 
   /* ---------- what the caret is on ---------- */
 

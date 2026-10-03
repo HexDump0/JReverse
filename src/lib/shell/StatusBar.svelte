@@ -2,14 +2,19 @@
   import type { Snippet } from "svelte";
   import { status } from "$lib/status.svelte";
 
-  let { logOpen, ontogglelog, children }: { logOpen: boolean; ontogglelog: () => void; children?: Snippet } = $props();
+  let {
+    logOpen,
+    ontogglelog,
+    where = [],
+    children,
+  }: { logOpen: boolean; ontogglelog: () => void; /** e.g. "Ln 12, Col 5". */ where?: string[]; children?: Snippet } = $props();
 </script>
 
 <footer class="statusbar">
   <span class="msg" class:err={status.error}>{status.message}</span>
   <span class="r">
     {@render children?.()}
-    {#each status.where as part (part)}<span class="where">{part}</span>{/each}
+    {#each where as part (part)}<span class="where">{part}</span>{/each}
     {#if status.task}
       <span class="task"><i class="spin"></i><span>{status.task}</span></span>
     {/if}
