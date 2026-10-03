@@ -148,7 +148,7 @@ export class Workspace {
   /** The name to show for a class, after renames. */
   className(id: string): string {
     void this.names;
-    return this.project.renames[id] ?? simpleName(id);
+    return this.project.renames[id] ?? this.byId.get(id)?.name ?? simpleName(id);
   }
 
   isRenamed(id: string): boolean {
@@ -512,7 +512,7 @@ export class Workspace {
     clearTimeout(this.saveTimer);
     const p = $state.snapshot(this.project);
     const tabs = this.tabs.filter((t) => t.kind === "class").map((t) => ({ cls: t.cls!, view: t.view, line: t.caret.line }));
-    const hasNotes = Object.keys(p.renames).length || Object.keys(p.comments).length || p.bookmarks.length;
+    const hasNotes = Object.keys(p.renames).length || Object.keys(p.comments).length || p.bookmarks.length || p.deobfuscate;
     try {
       await saveProject(this.path, hasNotes || tabs.length ? { ...p, tabs, active: this.activeKey } : null);
     } catch (e) {

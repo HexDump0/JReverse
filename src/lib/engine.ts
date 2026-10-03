@@ -12,6 +12,8 @@ export interface Opened {
   classCount: number;
   /** Decompilers that can read this file, jadx first. */
   engines: string[];
+  /** Whether jadx generated names for short and clashing identifiers. */
+  deobfuscated: boolean;
   ms: number;
 }
 
@@ -19,6 +21,8 @@ export interface ClassEntry {
   /** Original internal name, e.g. `com/foo/Bar`. Never changes on rename. */
   id: string;
   kind: ClassKind;
+  /** The name jadx shows when it isn't the id's, e.g. a generated `C0123a`. */
+  name?: string;
 }
 
 export interface Decompiled {
@@ -186,6 +190,8 @@ export interface Project {
   renames: Record<string, string>;
   comments: Record<string, string>;
   bookmarks: { cls: string; line: number; note: string }[];
+  /** Open the file with jadx's generated names. */
+  deobfuscate?: boolean;
   /** Open tabs when the file was last closed, to resume. */
   tabs?: { cls: string; view: "java" | "vineflower" | "smali"; line: number }[];
   active?: string;
@@ -204,8 +210,9 @@ export type EngineStatus =
   | { state: "crashed"; generation: number }
   | { state: "failed"; code: string; message: string };
 
-export function openFile(path: string): Promise<Opened> {
-  return invoke("open_file", { path });
+/** `deobfuscate` has jadx give short and clashing names generated aliases. */
+export function openFile(path: string, deobfuscate = false): Promise<Opened> {
+  return invoke("open_file", { path, deobfuscate });
 }
 
 export function listClasses(session: string): Promise<ClassEntry[]> {

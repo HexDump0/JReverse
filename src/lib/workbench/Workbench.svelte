@@ -25,7 +25,18 @@
   import { fridaSnippet, ownerOf, xposedSnippet } from "./hooks";
   import { dotted, simpleName, type Tab, type Workspace } from "./workspace.svelte";
 
-  let { ws, home }: { ws: Workspace; home: string | null } = $props();
+  let {
+    ws,
+    home,
+    onreopen,
+  }: { ws: Workspace; home: string | null; /** Opens the file again, with generated names on or off. */ onreopen: (deobfuscate: boolean) => void } =
+    $props();
+
+  async function reopen(deobfuscate: boolean) {
+    ws.project.deobfuscate = deobfuscate || undefined;
+    await ws.save();
+    onreopen(deobfuscate);
+  }
 
   type Side = "classes" | "files" | "search" | "notes";
   const PREFS = "jreverse.workbench";
@@ -418,6 +429,9 @@
   /** File menu items that only make sense with a file open. */
   export function fileItems(): MenuItem[] {
     return [
+      ws.opened.deobfuscated
+        ? { label: "Show original names", run: () => reopen(false) }
+        : { label: "Use generated names", run: () => reopen(true) },
       { label: "Save class as", key: "Ctrl S", disabled: !doc || tab.kind === "overview", run: saveClass },
       exporting
         ? { label: "Cancel export", run: () => exporting && cancelJob(exporting.ticket) }
@@ -613,7 +627,7 @@
 
     <div class="editor">
       {#if tab.kind === "overview"}
-        <OverviewPage {ws} {home} onfilter={(p) => ((side = "classes"), (filter = p))} />
+        <OverviewPage {ws} {home} onfilter={(p) => ((side = "classes"), (filter = p))} onreopen={reopen} />
       {:else}
         <div class="crumbs">
           {#if tab.kind === "manifest"}

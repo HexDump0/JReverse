@@ -13,9 +13,11 @@
     home: string | null;
     /** Narrows the class tree to a package. */
     onfilter: (prefix: string) => void;
+    /** Opens the file again with jadx's generated names on or off. */
+    onreopen: (deobfuscate: boolean) => void;
   }
 
-  let { ws, home, onfilter }: Props = $props();
+  let { ws, home, onfilter, onreopen }: Props = $props();
 
   const COMPONENTS_SHOWN = 8;
   const GROUPS_SHOWN = 10;
@@ -53,6 +55,7 @@
     level: "error" | "warn" | "info";
     title: string;
     text: string;
+    action?: { label: string; run: () => void };
   }
 
   const findings = $derived.by((): Finding[] => {
@@ -72,7 +75,21 @@
       });
     }
     const share = makeup.obfuscated / Math.max(1, ws.classes.length);
-    if (share >= 0.15) f.push({ level: "info", title: "Likely obfuscated", text: `${Math.round(share * 100)}% of classes have one- or two-letter names.` });
+    if (ws.opened.deobfuscated) {
+      f.push({
+        level: "info",
+        title: "Generated names",
+        text: "Short and clashing names show as jadx's generated ones, such as C0123a.",
+        action: { label: "Show original names", run: () => onreopen(false) },
+      });
+    } else if (share >= 0.15) {
+      f.push({
+        level: "info",
+        title: "Likely obfuscated",
+        text: `${Math.round(share * 100)}% of classes have one- or two-letter names.`,
+        action: { label: "Use generated names", run: () => onreopen(true) },
+      });
+    }
     return f;
   });
 
@@ -135,6 +152,7 @@
             <div class="finding {f.level}">
               <Icon name="alert" size={15} />
               <div><strong>{f.title}</strong><span>{f.text}</span></div>
+              {#if f.action}<button class="fact" onclick={f.action.run}>{f.action.label}</button>{/if}
             </div>
           {/each}
         </section>
@@ -405,6 +423,18 @@
     color: var(--obf);
   }
   .finding.info strong {
+    color: var(--text-hi);
+  }
+  .fact {
+    margin-left: auto;
+    flex: none;
+    font-size: 12.5px;
+    color: var(--text-2);
+    text-decoration: underline;
+    text-decoration-color: #3c4246;
+    text-underline-offset: 3px;
+  }
+  .fact:hover {
     color: var(--text-hi);
   }
 

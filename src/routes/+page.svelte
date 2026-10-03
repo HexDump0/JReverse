@@ -92,7 +92,8 @@
     if (path) openPath(path);
   }
 
-  async function openPath(path: string) {
+  /** `deobfuscate` overrides what the file's saved project says. */
+  async function openPath(path: string, o: { deobfuscate?: boolean } = {}) {
     if (opening?.path === path) return;
     const token = ++openToken;
     const name = baseName(path);
@@ -115,7 +116,8 @@
     opening = { path, peek, phase: "open", fresh };
     setTask(`Opening ${name}`);
     try {
-      const opened = await openFile(path);
+      const deobfuscate = o.deobfuscate ?? (await loadProject(path).catch(() => null))?.deobfuscate ?? false;
+      const opened = await openFile(path, deobfuscate);
       if (token !== openToken) {
         closeSession(opened.session).catch(() => {});
         if (fresh) recents = await forgetRecent(path);
@@ -307,7 +309,7 @@
     <Onboarding onfinish={() => (onboarding = false)} />
   {:else if ws}
     {#key ws}
-      <Workbench {ws} {home} bind:this={workbench} />
+      <Workbench {ws} {home} bind:this={workbench} onreopen={(d) => ws && openPath(ws.path, { deobfuscate: d })} />
     {/key}
   {:else}
     <StartScreen
