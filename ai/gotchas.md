@@ -23,6 +23,9 @@ Things that look wrong, break silently or have already wasted time. Add to this.
   Wait for the `open` reply first.
 - stdout is protocol-only. Anything printed to stdout from engine code breaks
   the client. Log to stderr (slf4j-simple is configured for that).
+- **Rust sends `null` for an unset `Option`.** `json!({"limit": limit})` with `None` gives
+  `"limit": null`, so every optional engine param must treat null like a missing key (`optInt`,
+  `optString` in `Methods`). This once broke every search in the real app while the tests passed.
 - Changing the protocol means bumping **both** `Version.PROTOCOL` (Java) and
   `PROTOCOL` in `src-tauri/src/engine/process.rs`.
 - The shadow jar must merge `META-INF/services` (`mergeServiceFiles()` +
@@ -58,7 +61,9 @@ Things that look wrong, break silently or have already wasted time. Add to this.
   commands over HTTP, with Playwright (`playwright-core`, Chromium at
   `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`) injecting a `__TAURI_INTERNALS__` whose
   `invoke` posts to it. Real decompiler output, real search progress. Not in the repo (2026-10-03,
-  claude-q8b kept it in its scratchpad); rebuild it from this description if you need it.
+  claude-q8b kept it in its scratchpad); rebuild it from this description if you need it. Make it
+  behave like the Rust commands (nulls for unset options, pass results through whole), or it hides
+  bugs that the real app has.
 - The real app runs under Xvfb: install `libwebkit2gtk-4.1-dev libgtk-3-dev xvfb xdotool imagemagick`,
   `cargo build`, start `Xvfb :99`, run `target/debug/jreverse` with `DISPLAY=:99` and a throwaway
   `XDG_DATA_HOME`, drive it with `xdotool key`, screenshot with `import -window root`.

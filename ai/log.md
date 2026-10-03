@@ -10,13 +10,16 @@ What was done. What's left. Anything the next agent must know.
 ---
 
 ## 2026-10-03 — claude-q8b — the workbench, engine protocol v2, Vineflower, files
-- Engine protocol v2 (`engine/README.md`): code links, smali/bytecode, usages, search with progress
-  and cancel, export, overview (manifest, permissions, components, v1/v2/v3 signing, native libs),
-  renames/comments, files and resources, Vineflower for class files, AAB input. 24 engine tests.
+- Engine protocol v2 (`engine/README.md`): code links, smali/bytecode, usages, search (names, code,
+  strings, files) with progress and cancel, export, overview (manifest, components, v1/v2/v3
+  signing), renames/comments, files and resources, Vineflower for class files, AAB input, jadx
+  deobfuscation ("generated names"). 25 engine tests.
 - Rust: commands for all of it, progress events, code-data replay after a restart, `projects.rs`.
-- UI: the real workbench in `src/lib/workbench/` (see project.md), F1 shortcuts, Continue card shows
-  where you were. Vitest added. CI workflow added. Verified with a real-engine browser harness and
-  in the real app under Xvfb (gotchas.md, Testing).
+- UI: the real workbench in `src/lib/workbench/` (see project.md): tree, tabs, code view, outline,
+  usages, search, notes, files, overview, Frida/Xposed snippets, F1 shortcuts; the Continue card
+  shows where you were. Vitest (26 tests) and a CI workflow added.
+- Verified with a real-engine browser harness and in the real app under Xvfb (gotchas, Testing),
+  on F-Droid and NewPipe APKs. A branch review found 6 bugs, all fixed (one: null params).
 - Not pushed: GitHub returned 403. Built without `design/mockup.html`; review against it.
 
 ## 2026-10-01 — claude-s7k — no title bar, first-run welcome, bundled example
