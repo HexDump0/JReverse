@@ -354,6 +354,7 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
     background: var(--ground);
   }
   .log {
