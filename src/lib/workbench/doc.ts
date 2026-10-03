@@ -5,7 +5,8 @@ import { highlight, type Token, type TokenKind } from "$lib/java/highlight";
 import { highlightSmali } from "$lib/java/smali";
 import { highlightXml } from "$lib/java/xml";
 
-export type View = "java" | "smali";
+/** `java` is jadx; `vineflower` the second decompiler, for JVM class files; `smali` smali or JVM bytecode. */
+export type View = "java" | "vineflower" | "smali";
 
 export interface Link {
   col: number;
@@ -229,6 +230,38 @@ export function wordAt(line: string, col: number): { start: number; end: number 
 
 export function linkAt(doc: Doc, pos: Pos): Link | undefined {
   return doc.links[pos.line]?.find((l) => l.col <= pos.col && pos.col <= l.col + l.len);
+}
+
+const NOT_A_DECL = /^\s*(?:return|throw|new|else|case|if|while|for|do|yield|assert)\b/;
+
+/**
+ * Where a node is declared, from the doc's index or, for text without one
+ * (Vineflower output), by reading the declarations: `... name(` for methods,
+ * `... name =` or `... name;` for fields, `class Name` for classes.
+ */
+export function findDecl(doc: Doc, node: NodeInfo): Pos | undefined {
+  const known = doc.decls.get(node.id);
+  if (known) return known;
+  const owner = node.id.includes(".") ? node.id.slice(0, node.id.indexOf(".")) : node.id;
+  const ownerName = owner.slice(owner.lastIndexOf("/") + 1).split("$").pop()!;
+  const ctor = node.kind === "method" && node.id.includes(".<init>(");
+  // Original names: text without an index (Vineflower's) doesn't show renames.
+  const member = node.id.slice(node.id.indexOf(".") + 1).split(/[(:]/)[0];
+  const name = node.kind === "class" || ctor ? ownerName : member;
+  const esc = name.replace(/[$]/g, "\\$");
+  const re =
+    node.kind === "class"
+      ? new RegExp(`\\b(?:class|interface|enum|record|@interface)\\s+${esc}\\b`)
+      : node.kind === "method"
+        ? new RegExp(`^\\s*(?:@[\\w.]+\\s+)*(?:[\\w$<>\\[\\],.?]+\\s+)+(${esc})\\s*\\(`)
+        : new RegExp(`^\\s*(?:@[\\w.]+\\s+)*(?:[\\w$<>\\[\\],.?]+\\s+)+(${esc})\\s*(?:=|;)`);
+  for (let line = 0; line < doc.lines.length; line++) {
+    const text = doc.lines[line];
+    if (NOT_A_DECL.test(text)) continue;
+    const m = re.exec(text);
+    if (m) return { line, col: text.indexOf(name, node.kind === "class" ? m.index : m.index + m[0].lastIndexOf(name)) };
+  }
+  return undefined;
 }
 
 /** The innermost declaration at or above a line: roughly, what the line is inside of. */

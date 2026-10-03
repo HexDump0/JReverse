@@ -50,6 +50,8 @@ pub struct Opened {
     pub session: String,
     pub kind: String,
     pub class_count: u64,
+    /// Decompilers that can read this file, jadx first.
+    pub engines: Vec<String>,
     pub ms: u64,
 }
 
@@ -80,6 +82,8 @@ struct OpenResult {
     session: String,
     kind: String,
     class_count: u64,
+    #[serde(default)]
+    engines: Vec<String>,
     ms: u64,
 }
 
@@ -131,7 +135,7 @@ impl Engine {
             session.clone(),
             SessionEntry { path: path.to_path_buf(), engine_id: opened.session, generation: process.generation, code_data: None },
         );
-        Ok(Opened { session, kind: opened.kind, class_count: opened.class_count, ms: opened.ms })
+        Ok(Opened { session, kind: opened.kind, class_count: opened.class_count, engines: opened.engines, ms: opened.ms })
     }
 
     pub async fn list_classes(&self, session: &str) -> Result<Vec<ClassEntry>, EngineError> {

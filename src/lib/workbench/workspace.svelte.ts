@@ -19,7 +19,7 @@ import {
   type Usage,
 } from "$lib/engine";
 import { say, setTask } from "$lib/status.svelte";
-import { enclosing, javaDoc, smaliDoc, xmlDoc, type Doc, type Pos, type View } from "./doc";
+import { enclosing, findDecl, javaDoc, smaliDoc, xmlDoc, type Doc, type Pos, type View } from "./doc";
 import { ownerOf } from "./frida";
 import { buildTree, type Pkg } from "./tree";
 import type { Reveal } from "./CodeView.svelte";
@@ -165,6 +165,7 @@ export class Workspace {
     setTask(`Decompiling ${simpleName(cls)}`);
     const fetch = async (): Promise<Doc> => {
       if (view === "java") return javaDoc(await decompileClass(this.session, cls));
+      if (view === "vineflower") return javaDoc(await decompileClass(this.session, cls, "vineflower"));
       const s = await smaliClass(this.session, cls);
       return smaliDoc(cls, s.source, s.ms, (id) => this.byId.has(id));
     };
@@ -270,9 +271,16 @@ export class Workspace {
       return;
     }
     let pos = o.pos;
-    if (o.node) pos = doc.decls.get(o.node) ?? (o.node !== top ? doc.decls.get(ownerOf(o.node)) : undefined) ?? pos;
-    if (!pos && cls !== top) pos = doc.decls.get(cls);
+    if (o.node) pos = this.declIn(doc, o.node) ?? pos;
+    if (!pos && cls !== top) pos = this.declIn(doc, cls);
     if (pos) this.place(tab, pos, o.mark);
+  }
+
+  /** Where `id` (or failing that, its class) is declared in `doc`. */
+  private declIn(doc: Doc, id: string): Pos | undefined {
+    const kind = id.includes("(") ? "method" : id.includes(".") ? "field" : "class";
+    const stub = { kind, id, top: "", name: "", detail: "", access: "", static: false } as const;
+    return findDecl(doc, stub) ?? (id.includes(".") ? findDecl(doc, { ...stub, kind: "class", id: ownerOf(id) }) : undefined);
   }
 
   private place(tab: Tab, pos: Pos, mark = false) {
@@ -330,7 +338,7 @@ export class Workspace {
     } catch {
       return;
     }
-    const pos = (from && doc.decls.get(from.id)) || { line: 0, col: 0 };
+    const pos = (from && this.declIn(doc, from.id)) || { line: 0, col: 0 };
     this.place(tab, pos);
   }
 

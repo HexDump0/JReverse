@@ -20,7 +20,7 @@
   import OverviewPage from "./OverviewPage.svelte";
   import SearchPanel from "./SearchPanel.svelte";
   import UsagesPanel from "./UsagesPanel.svelte";
-  import { enclosing, linkAt, wordAt, type Doc, type Link, type Pos } from "./doc";
+  import { enclosing, linkAt, wordAt, type Link, type Pos, type View } from "./doc";
   import { fridaSnippet, ownerOf } from "./frida";
   import { dotted, simpleName, type Tab, type Workspace } from "./workspace.svelte";
 
@@ -66,6 +66,19 @@
   const doc = $derived(tab.kind === "manifest" ? ws.manifestDoc() : entry?.state === "ready" ? entry.doc : null);
   const pkg = $derived(tab.cls ? dotted(tab.cls.slice(0, Math.max(0, tab.cls.lastIndexOf("/")))) : "");
   const isDex = $derived(ws.opened.kind === "apk" || ws.opened.kind === "aab" || ws.opened.kind === "dex");
+  /** The views a class tab can switch between, in the order shown. */
+  const views = $derived<{ view: View; label: string; tag: string }[]>(
+    isDex
+      ? [
+          { view: "java", label: "Java", tag: "" },
+          { view: "smali", label: "Smali", tag: "smali" },
+        ]
+      : [
+          { view: "java", label: "jadx", tag: "" },
+          ...(ws.opened.engines?.includes("vineflower") ? [{ view: "vineflower" as const, label: "Vineflower", tag: "vineflower" }] : []),
+          { view: "smali", label: "Bytecode", tag: "bytecode" },
+        ],
+  );
 
   untrack(() => ws.restore());
 
@@ -73,7 +86,7 @@
   export function where(): string[] {
     if (!doc || tab.kind === "overview") return [];
     const parts = [`Ln ${tab.caret.line + 1}, Col ${tab.caret.col + 1}`];
-    if (tab.kind === "class" && tab.view === "java") {
+    if (tab.kind === "class" && tab.view !== "smali") {
       if (doc.warnings) parts.push(`${doc.warnings} ${doc.warnings === 1 ? "warning" : "warnings"}`);
       parts.push(`${doc.engine} ${doc.ms} ms`);
     }
@@ -233,7 +246,7 @@
 
   async function saveClass() {
     if (!doc || tab.kind === "overview") return;
-    const name = tab.kind === "manifest" ? "AndroidManifest.xml" : `${ws.className(tab.cls!)}.${tab.view === "java" ? "java" : "smali"}`;
+    const name = tab.kind === "manifest" ? "AndroidManifest.xml" : `${ws.className(tab.cls!)}.${tab.view === "smali" ? "smali" : "java"}`;
     const path = await pickSave({ defaultPath: name });
     if (!path) return;
     try {
@@ -364,7 +377,10 @@
           { label: "Comment", key: ";", disabled: tab.kind !== "class", run: comment },
           { label: "Bookmark line", key: "Ctrl B", disabled: tab.kind !== "class", run: bookmark },
           { label: "Copy Frida snippet", key: "F", disabled: tab.kind !== "class", run: frida },
-          { label: tab.view === "java" ? (isDex ? "Show smali" : "Show bytecode") : "Show Java", key: "Tab", disabled: tab.kind !== "class", run: toggleView },
+          { label: tab.view === "smali" ? "Show Java" : isDex ? "Show smali" : "Show bytecode", key: "Tab", disabled: tab.kind !== "class", run: toggleView },
+          ...(views.some((v) => v.view === "vineflower")
+            ? [{ label: tab.view === "vineflower" ? "Show jadx output" : "Show Vineflower output", disabled: tab.kind !== "class", run: () => ws.setView(tab.view === "vineflower" ? "java" : "vineflower") }]
+            : []),
         ],
       },
       {
@@ -412,8 +428,9 @@
     return items;
   }
 
+  /** Tab flips between Java and smali/bytecode; from Vineflower it goes back to jadx. */
   function toggleView() {
-    if (tab.kind === "class") ws.setView(tab.view === "java" ? "smali" : "java");
+    if (tab.kind === "class") ws.setView(tab.view === "smali" ? "java" : tab.view === "java" ? "smali" : "java");
   }
 
   /* ---------- keys ---------- */
@@ -555,7 +572,7 @@
           onauxclick={(e) => e.button === 1 && ws.closeTab(t.key)}
         >
           <span class="tl" class:renamed={!!t.cls && ws.isRenamed(t.cls)}>{tabLabel(t)}</span>
-          {#if t.kind === "class" && t.view === "smali"}<span class="tv">{isDex ? "smali" : "bytecode"}</span>{/if}
+          {#if t.kind === "class" && t.view !== "java"}<span class="tv">{views.find((v) => v.view === t.view)?.tag}</span>{/if}
           {#if t.kind !== "overview"}
             <button class="tx" title="Close (Ctrl W)" onclick={(e) => (e.stopPropagation(), ws.closeTab(t.key))}><Icon name="x" size={12} /></button>
           {/if}
@@ -579,8 +596,9 @@
             <span class="cn">{ws.className(tab.cls!)}</span>
             {#if ws.isRenamed(tab.cls!)}<span class="pk">{simpleName(tab.cls!)}</span>{/if}
             <div class="seg" role="radiogroup" aria-label="View">
-              <button role="radio" aria-checked={tab.view === "java"} class:on={tab.view === "java"} onclick={() => ws.setView("java")}>Java</button>
-              <button role="radio" aria-checked={tab.view === "smali"} class:on={tab.view === "smali"} onclick={() => ws.setView("smali")}>{isDex ? "Smali" : "Bytecode"}</button>
+              {#each views as v (v.view)}
+                <button role="radio" aria-checked={tab.view === v.view} class:on={tab.view === v.view} onclick={() => ws.setView(v.view)}>{v.label}</button>
+              {/each}
             </div>
           {/if}
         </div>
@@ -596,7 +614,7 @@
               oncaret={(p) => (tab.caret = p)}
               oncontext={onCodeContext}
             />
-            {#if prefs.outline && tab.kind === "class"}
+            {#if prefs.outline && tab.kind === "class" && doc.declLines.length}
               <aside class="outline">
                 <div class="oh">Outline</div>
                 <Outline {doc} caret={tab.caret} onjump={jump} />
@@ -606,7 +624,9 @@
             <div class="state err">
               <p>Couldn't decompile {ws.className(tab.cls ?? "")}</p>
               <pre>{entry.message}</pre>
-              {#if tab.view === "java"}<button class="lnk" onclick={() => ws.setView("smali")}>Show {isDex ? "smali" : "bytecode"} instead</button>{/if}
+              {#each views.filter((v) => v.view !== tab.view) as v (v.view)}
+                <button class="lnk" onclick={() => ws.setView(v.view)}>Show {v.label} instead</button>
+              {/each}
             </div>
           {:else}
             <div class="state"><i class="spin"></i>Decompiling {ws.className(tab.cls ?? "")}</div>

@@ -10,6 +10,8 @@ export interface Opened {
   session: string;
   kind: InputKind;
   classCount: number;
+  /** Decompilers that can read this file, jadx first. */
+  engines: string[];
   ms: number;
 }
 
@@ -174,7 +176,7 @@ export interface Project {
   comments: Record<string, string>;
   bookmarks: { cls: string; line: number; note: string }[];
   /** Open tabs when the file was last closed, to resume. */
-  tabs?: { cls: string; view: "java" | "smali"; line: number }[];
+  tabs?: { cls: string; view: "java" | "vineflower" | "smali"; line: number }[];
   active?: string;
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Decompiled } from "$lib/engine";
-import { enclosing, javaDoc, linkAt, segments, smaliDoc, wordAt, xmlDoc } from "./doc";
+import { enclosing, findDecl, javaDoc, linkAt, segments, smaliDoc, wordAt, xmlDoc } from "./doc";
 
 const node = (id: string, kind: "class" | "method" | "field", name: string) => ({
   kind,
@@ -115,5 +115,28 @@ describe("xmlDoc", () => {
     expect(xml.split("\n")[0].slice(doc.links[0][0].col, doc.links[0][0].col + doc.links[0][0].len)).toBe(".Main");
     expect(doc.links[1].length).toBe(1);
     expect(doc.links[2]).toEqual([]);
+  });
+});
+
+describe("findDecl", () => {
+  // Vineflower-style output: no index, so declarations are read from the text.
+  const source = [
+    "public final class Vault {",
+    "    private final Map<String, Vault.Entry> entries = new LinkedHashMap<>();",
+    "    public Vault(License var1) {",
+    "        return put(var1);",
+    "    }",
+    "    public boolean put(String var1, String var2) {",
+    "    private static final class Entry {",
+  ].join("\n");
+  const doc = javaDoc({ source, engine: "vineflower", ms: 1, warnings: 0, nodes: [], links: [], decls: [] });
+  const find = (kind: "class" | "method" | "field", id: string) => findDecl(doc, { ...node(id, kind, "renamed"), kind });
+
+  it("finds methods, constructors, fields and classes by their original names", () => {
+    expect(find("method", "a/Vault.put(Ljava/lang/String;Ljava/lang/String;)Z")).toEqual({ line: 5, col: 19 });
+    expect(find("method", "a/Vault.<init>(La/License;)V")).toEqual({ line: 2, col: 11 });
+    expect(find("field", "a/Vault.entries:Ljava/util/Map;")).toEqual({ line: 1, col: 43 });
+    expect(find("class", "a/Vault$Entry")).toEqual({ line: 6, col: 31 });
+    expect(find("method", "a/Vault.gone()V")).toBeUndefined();
   });
 });
