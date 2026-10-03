@@ -8,7 +8,7 @@ export function fmtSize(b: number): string {
   return `${(b / 1048576).toFixed(1)} MB`;
 }
 
-const KIND_LABEL: Record<InputKind, string> = { apk: "APK", aar: "AAR", jar: "JAR", dex: "DEX", class: "Class file" };
+const KIND_LABEL: Record<InputKind, string> = { apk: "APK", aab: "App Bundle", aar: "AAR", jar: "JAR", dex: "DEX", class: "Class file" };
 export const kindLabel = (k: InputKind) => KIND_LABEL[k] ?? k.toUpperCase();
 
 const DAY = 86_400_000;

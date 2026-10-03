@@ -32,6 +32,7 @@ class SmokeTest {
 				"jar", Fixtures.jar(),
 				"dex", Fixtures.dex(Files.createDirectories(tmp.resolve("dex"))),
 				"apk", Fixtures.apk(Files.createDirectories(tmp.resolve("apk"))),
+				"aab", Fixtures.aab(Files.createDirectories(tmp.resolve("aab"))),
 				"aar", Fixtures.aar(tmp));
 		try (EngineClient engine = EngineClient.fromDist(dist)) {
 			for (Map.Entry<String, Path> input : inputs.entrySet()) {

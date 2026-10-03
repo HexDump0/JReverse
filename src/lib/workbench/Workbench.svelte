@@ -65,7 +65,7 @@
   const entry = $derived(ws.doc(tab));
   const doc = $derived(tab.kind === "manifest" ? ws.manifestDoc() : entry?.state === "ready" ? entry.doc : null);
   const pkg = $derived(tab.cls ? dotted(tab.cls.slice(0, Math.max(0, tab.cls.lastIndexOf("/")))) : "");
-  const isDex = $derived(ws.opened.kind === "apk" || ws.opened.kind === "dex");
+  const isDex = $derived(ws.opened.kind === "apk" || ws.opened.kind === "aab" || ws.opened.kind === "dex");
 
   untrack(() => ws.restore());
 

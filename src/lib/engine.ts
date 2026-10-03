@@ -2,7 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type InputKind = "apk" | "aar" | "jar" | "dex" | "class";
+export type InputKind = "apk" | "aab" | "aar" | "jar" | "dex" | "class";
 export type ClassKind = "class" | "interface" | "enum" | "annotation" | "record";
 
 export interface Opened {

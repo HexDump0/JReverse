@@ -62,6 +62,14 @@ public final class Fixtures {
 		return buf.array();
 	}
 
+	/** An App Bundle: code lives under {@code base/dex/}, the manifest is protobuf (not decoded). */
+	public static Path aab(Path dir) throws IOException {
+		Path aab = dir.resolve("fixture.aab");
+		zip(aab, "BundleConfig.pb", new byte[0], "base/manifest/AndroidManifest.xml", new byte[] {0x0a, 0},
+				"base/dex/classes.dex", Files.readAllBytes(dex(dir)));
+		return aab;
+	}
+
 	public static Path aar(Path dir) throws IOException {
 		Path aar = dir.resolve("fixture.aar");
 		zip(aar, "AndroidManifest.xml", "<manifest/>".getBytes(), "classes.jar", Files.readAllBytes(jar()));

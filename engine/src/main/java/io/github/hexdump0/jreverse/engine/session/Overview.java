@@ -42,8 +42,9 @@ import io.github.hexdump0.jreverse.engine.backend.JadxBackend;
 public final class Overview {
 
 	private static final String ANDROID = "http://schemas.android.com/apk/res/android";
-	private static final Pattern NATIVE_LIB = Pattern.compile("(?:lib|jni)/([^/]+)/([^/]+\\.so)");
-	private static final Pattern DEX = Pattern.compile("classes\\d*\\.dex");
+	// App Bundles put both under a module folder: base/lib/..., base/dex/...
+	private static final Pattern NATIVE_LIB = Pattern.compile("(?:[^/]+/)?(?:lib|jni)/([^/]+)/([^/]+\\.so)");
+	private static final Pattern DEX = Pattern.compile("(?:[^/]+/dex/)?classes\\d*\\.dex");
 	private static final String[] COMPONENTS = {"activity", "activity-alias", "service", "receiver", "provider"};
 
 	private Overview() {

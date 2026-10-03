@@ -238,7 +238,7 @@
   >
     <h1 class="hero">{drag ? "Let go to open." : "Drop a file to decompile."}</h1>
     <p class="sub">or <button class="pick" onclick={onbrowse}>choose one</button><span class="hk">Ctrl+O</span></p>
-    <p class="fmt"><Dots parts={["APK", "AAR", "JAR", "WAR", "DEX", "class"]} /></p>
+    <p class="fmt"><Dots parts={["APK", "AAB", "AAR", "JAR", "WAR", "DEX", "class"]} /></p>
     <div class="anchor" bind:this={anchor}></div>
     {#if readout}
       {@const head = readout.head.slice(0, 8)}

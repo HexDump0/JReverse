@@ -36,7 +36,7 @@
   /** `VITE_FIRST_RUN=1` shows onboarding on every launch and hides recent files, as a new user sees it. */
   const FIRST_RUN = import.meta.env.VITE_FIRST_RUN === "1";
   const FILTERS = [
-    { name: "Java & Android", extensions: ["apk", "aar", "jar", "war", "dex", "class", "zip"] },
+    { name: "Java & Android", extensions: ["apk", "aab", "aar", "jar", "war", "dex", "class", "zip"] },
     { name: "All files", extensions: ["*"] },
   ];
 

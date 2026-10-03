@@ -4,6 +4,7 @@ import java.util.Locale;
 
 public enum InputKind {
 	APK,
+	AAB,
 	AAR,
 	JAR,
 	DEX,

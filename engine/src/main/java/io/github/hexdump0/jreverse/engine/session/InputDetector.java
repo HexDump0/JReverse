@@ -21,6 +21,8 @@ public final class InputDetector {
 	private static final byte[] DEX = {'d', 'e', 'x', '\n'};
 	private static final byte[] CLASS = {(byte) 0xCA, (byte) 0xFE, (byte) 0xBA, (byte) 0xBE};
 	private static final Pattern ROOT_DEX = Pattern.compile("classes\\d*\\.dex");
+	/** An App Bundle keeps each module's code under {@code <module>/dex/}. */
+	private static final Pattern MODULE_DEX = Pattern.compile("[^/]+/dex/classes\\d*\\.dex");
 
 	private InputDetector() {
 	}
@@ -43,7 +45,7 @@ public final class InputDetector {
 		if (Arrays.equals(magic, ZIP)) {
 			return detectZip(path);
 		}
-		throw unsupported("not an APK, AAR, JAR, DEX or class file");
+		throw unsupported("not an APK, AAB, AAR, JAR, DEX or class file");
 	}
 
 	private static InputKind detectZip(Path path) throws RpcException {
@@ -61,7 +63,7 @@ public final class InputDetector {
 					hasClassesJar = true;
 				} else if (name.endsWith(".class")) {
 					hasClassFiles = true;
-				} else if (name.startsWith("base/dex/")) {
+				} else if (MODULE_DEX.matcher(name).matches()) {
 					isBundle = true;
 				}
 			}
@@ -70,14 +72,14 @@ public final class InputDetector {
 		} catch (IOException e) {
 			throw new RpcException(ErrorCode.OPEN_FAILED, "cannot read " + path + ": " + e.getMessage(), e);
 		}
+		if (isBundle) {
+			return InputKind.AAB;
+		}
 		if (hasClassesJar) {
 			return InputKind.AAR;
 		}
 		if (hasClassFiles) {
 			return InputKind.JAR;
-		}
-		if (isBundle) {
-			throw unsupported("Android App Bundles (.aab) aren't supported yet");
 		}
 		throw unsupported("archive contains no DEX or class files");
 	}

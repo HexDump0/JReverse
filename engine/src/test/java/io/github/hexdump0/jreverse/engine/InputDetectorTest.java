@@ -25,6 +25,7 @@ class InputDetectorTest {
 		assertEquals(InputKind.DEX, InputDetector.detect(Fixtures.dex(tmp)));
 		assertEquals(InputKind.APK, InputDetector.detect(Fixtures.apk(tmp)));
 		assertEquals(InputKind.AAR, InputDetector.detect(Fixtures.aar(tmp)));
+		assertEquals(InputKind.AAB, InputDetector.detect(Fixtures.aab(Files.createDirectories(tmp.resolve("aab")))));
 
 		Path cls = tmp.resolve("Thing.bin");
 		Files.write(cls, new byte[] {(byte) 0xCA, (byte) 0xFE, (byte) 0xBA, (byte) 0xBE, 0, 0, 0, 65});
@@ -51,10 +52,6 @@ class InputDetectorTest {
 		Path emptyZip = tmp.resolve("empty.zip");
 		Fixtures.zip(emptyZip, "readme.txt", "hi".getBytes());
 		assertUnsupported(emptyZip);
-
-		Path aab = tmp.resolve("app.aab");
-		Fixtures.zip(aab, "base/dex/classes.dex", new byte[] {'d', 'e', 'x', '\n'});
-		assertUnsupported(aab);
 
 		Path broken = tmp.resolve("broken.jar");
 		Files.write(broken, new byte[] {'P', 'K', 3, 4, 9, 9, 9});

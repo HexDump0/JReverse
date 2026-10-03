@@ -76,10 +76,11 @@ class ProtocolTest {
 	}
 
 	@Test
-	void openDexApkAndAar() throws Exception {
+	void openDexApkAabAndAar() throws Exception {
 		Map<String, Path> inputs = Map.of(
 				"dex", Fixtures.dex(Files.createDirectories(tmp.resolve("dex"))),
 				"apk", Fixtures.apk(Files.createDirectories(tmp.resolve("apk"))),
+				"aab", Fixtures.aab(Files.createDirectories(tmp.resolve("aab"))),
 				"aar", Fixtures.aar(tmp));
 		for (Map.Entry<String, Path> input : inputs.entrySet()) {
 			JsonObject open = result(engine.call("open", "path", input.getValue().toString()));

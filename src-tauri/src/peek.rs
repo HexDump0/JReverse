@@ -10,7 +10,7 @@ use std::path::Path;
 use serde::Serialize;
 
 const HEAD_LEN: usize = 16;
-const NOT_JAVA: &str = "Supported files are APK, AAR, JAR, WAR, DEX and class files.";
+const NOT_JAVA: &str = "Supported files are APK, AAB, AAR, JAR, WAR, DEX and class files.";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,6 +103,14 @@ fn detect_zip(file: &mut File) -> Found {
         let detail = if dex == 1 { "1 DEX file".into() } else { format!("{dex} DEX files") };
         return Found::Kind { kind: "apk", detail, classes: None };
     }
+    // An App Bundle keeps each module's code under `<module>/dex/`.
+    let mut modules: Vec<&str> = names.iter().filter(|n| is_module_dex(n)).filter_map(|n| n.split('/').next()).collect();
+    modules.sort_unstable();
+    modules.dedup();
+    if !modules.is_empty() {
+        let detail = if modules.len() == 1 { "App Bundle".into() } else { format!("App Bundle, {} modules", modules.len()) };
+        return Found::Kind { kind: "aab", detail, classes: None };
+    }
     if names.iter().any(|n| n == "classes.jar") {
         return Found::Kind { kind: "aar", detail: "classes.jar".into(), classes: None };
     }
@@ -115,12 +123,6 @@ fn detect_zip(file: &mut File) -> Found {
             .count() as u64;
         return Found::Kind { kind: "jar", detail: format!("{} classes", group(top)), classes: Some(top) };
     }
-    if names.iter().any(|n| n.starts_with("base/dex/")) {
-        return Found::Problem(
-            "App Bundles aren't supported yet",
-            "This is an .aab. Build an APK from it with bundletool, then open that.".into(),
-        );
-    }
     Found::Problem("A ZIP with no code in it", format!("It has {} entries but no DEX or class files.", names.len()))
 }
 
@@ -129,6 +131,12 @@ fn is_root_dex(name: &str) -> bool {
     name.strip_prefix("classes")
         .and_then(|rest| rest.strip_suffix(".dex"))
         .is_some_and(|n| n.bytes().all(|c| c.is_ascii_digit()))
+}
+
+/// `base/dex/classes.dex`, `feature/dex/classes2.dex`, ...
+fn is_module_dex(name: &str) -> bool {
+    let mut parts = name.split('/');
+    matches!((parts.next(), parts.next(), parts.next(), parts.next()), (Some(m), Some("dex"), Some(f), None) if !m.is_empty() && is_root_dex(f))
 }
 
 fn read_u32_at(file: &mut File, offset: u64) -> io::Result<Option<u32>> {
@@ -198,6 +206,9 @@ mod tests {
         let p = peek_bytes(&zip_with(&["classes.dex", "classes2.dex", "AndroidManifest.xml"]));
         assert_eq!((p.kind.as_deref(), p.detail.as_deref()), (Some("apk"), Some("2 DEX files")));
 
+        let p = peek_bytes(&zip_with(&["BundleConfig.pb", "base/dex/classes.dex", "base/dex/classes2.dex", "pay/dex/classes.dex"]));
+        assert_eq!((p.kind.as_deref(), p.detail.as_deref()), (Some("aab"), Some("App Bundle, 2 modules")));
+
         let p = peek_bytes(&zip_with(&["classes.jar", "AndroidManifest.xml"]));
         assert_eq!(p.kind.as_deref(), Some("aar"));
 
@@ -212,7 +223,6 @@ mod tests {
         assert_eq!(p.problem.unwrap().title, "This is a PDF");
 
         assert_eq!(peek_bytes(b"ab").problem.unwrap().title, "Too small to be a binary");
-        assert_eq!(peek_bytes(&zip_with(&["base/dex/classes.dex"])).problem.unwrap().title, "App Bundles aren't supported yet");
         assert_eq!(peek_bytes(&zip_with(&["readme.txt"])).problem.unwrap().title, "A ZIP with no code in it");
         assert_eq!(peek_bytes(b"PK\x03\x04garbage").problem.unwrap().title, "Damaged archive");
     }

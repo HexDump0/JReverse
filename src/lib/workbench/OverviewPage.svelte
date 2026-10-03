@@ -60,7 +60,7 @@
     const f: Finding[] = [];
     if (a?.debuggable === "true") f.push({ level: "error", title: "Debuggable", text: "android:debuggable is on, so any debugger can attach to the app." });
     if (certs.some((c) => c.debug)) f.push({ level: "error", title: "Debug certificate", text: "Signed with the Android debug key, not a release key." });
-    if ((o.kind === "apk") && !o.signing?.schemes.length) f.push({ level: "warn", title: "Not signed", text: "No v1, v2 or v3 signature. Android won't install it as is." });
+    if (o.kind === "apk" && !o.signing?.schemes.length) f.push({ level: "warn", title: "Not signed", text: "No v1, v2 or v3 signature. Android won't install it as is." });
     if (a?.usesCleartextTraffic === "true") f.push({ level: "warn", title: "Cleartext traffic", text: "android:usesCleartextTraffic is on: plain HTTP is allowed." });
     if (a?.allowBackup === "true") f.push({ level: "warn", title: "Backups allowed", text: "android:allowBackup is on: app data can be copied off the device." });
     const implicit = (a?.components ?? []).filter((c) => c.exportedImplicitly);
