@@ -4,6 +4,7 @@ import type { Decompiled, NodeInfo } from "$lib/engine";
 import { highlight, type Token, type TokenKind } from "$lib/java/highlight";
 import { highlightSmali } from "$lib/java/smali";
 import { highlightXml } from "$lib/java/xml";
+import { originalMember, ownerOf, simpleName } from "./ids";
 
 /** `java` is jadx; `vineflower` the second decompiler, for JVM class files; `smali` smali or JVM bytecode. */
 export type View = "java" | "vineflower" | "smali";
@@ -93,6 +94,9 @@ export function smaliDoc(cls: string, source: string, ms: number, known: (id: st
     }
     return n;
   };
+  // The listing holds inner and inlined classes too, each under its own `.class` line;
+  // members belong to the latest one.
+  let current = cls;
   doc.lines.forEach((text, line) => {
     const t = text.trimStart();
     const indent = text.length - t.length;
@@ -101,17 +105,20 @@ export function smaliDoc(cls: string, source: string, ms: number, known: (id: st
     let declared: { id: string; kind: NodeInfo["kind"]; name: string; at: number } | null = null;
     if (t.startsWith(".method ")) {
       const m = /([\w$<>]+)(\([^)]*\)\S+)\s*$/.exec(t);
-      if (m) declared = { id: `${cls}.${m[1]}${m[2]}`, kind: "method", name: m[1], at: indent + m.index };
+      if (m) declared = { id: `${current}.${m[1]}${m[2]}`, kind: "method", name: m[1], at: indent + m.index };
     } else if (t.startsWith(".field ")) {
       const m = /([\w$]+)(?::| )(\[*(?:L[\w$/]+;|[ZBSCIJFD]))/.exec(t.replace(/^\.field\s+(?:(?:public|private|protected|static|final|volatile|transient|synthetic|enum)\s+)*/, ""));
       if (m) {
         const name = m[1];
-        declared = { id: `${cls}.${name}:${m[2]}`, kind: "field", name, at: text.indexOf(name, indent + 7) };
+        declared = { id: `${current}.${name}:${m[2]}`, kind: "field", name, at: text.indexOf(name, indent + 7) };
       }
     } else if (t.startsWith(".class ")) {
       const m = /L?([\w$/]+);?\s*$/.exec(t);
       // Point at the simple name, the part a rename changes.
-      if (m) declared = { id: m[1], kind: "class", name: simple(m[1]), at: indent + m.index + m[0].indexOf(m[1]) + m[1].lastIndexOf("/") + 1 };
+      if (m) {
+        current = m[1];
+        declared = { id: m[1], kind: "class", name: simple(m[1]), at: indent + m.index + m[0].indexOf(m[1]) + m[1].lastIndexOf("/") + 1 };
+      }
     }
     if (declared && declared.at >= 0) {
       const n = node(declared.id, declared.kind, declared.name);
@@ -265,12 +272,10 @@ const NOT_A_DECL = /^\s*(?:return|throw|new|else|case|if|while|for|do|yield|asse
 export function findDecl(doc: Doc, node: NodeInfo): Pos | undefined {
   const known = doc.decls.get(node.id);
   if (known) return known;
-  const owner = node.id.includes(".") ? node.id.slice(0, node.id.indexOf(".")) : node.id;
-  const ownerName = owner.slice(owner.lastIndexOf("/") + 1).split("$").pop()!;
+  const ownerName = simpleName(ownerOf(node.id));
   const ctor = node.kind === "method" && node.id.includes(".<init>(");
   // Original names: text without an index (Vineflower's) doesn't show renames.
-  const member = node.id.slice(node.id.indexOf(".") + 1).split(/[(:]/)[0];
-  const name = node.kind === "class" || ctor ? ownerName : member;
+  const name = node.kind === "class" || ctor ? ownerName : originalMember(node.id);
   const esc = name.replace(/[$]/g, "\\$");
   const re =
     node.kind === "class"

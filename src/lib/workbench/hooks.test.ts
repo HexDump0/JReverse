@@ -37,9 +37,10 @@ describe("fridaSnippet", () => {
     expect(s).not.toContain("result");
   });
 
-  it("reads a field's value", () => {
-    const f: NodeInfo = { kind: "field", id: "com/x/A.KEY:I", top: "com/x/A", name: "KEY", detail: "KEY: int", access: "", static: true };
-    expect(fridaSnippet(f)).toBe('let A = Java.use("com.x.A");\nconsole.log(`A.KEY = ${A._KEY.value}`);');
+  it("reads a field's value by its original name", () => {
+    const f: NodeInfo = { kind: "field", id: "com/x/A.KEY:I", top: "com/x/A", name: "secret", detail: "secret: int", access: "", static: true };
+    expect(fridaSnippet(f)).toBe('let A = Java.use("com.x.A");\nconsole.log(`A.KEY = ${A.KEY.value}`);');
+    expect(xposedSnippet(f)).toContain('"KEY")');
   });
 });
 

@@ -1,5 +1,6 @@
 // Frida and Xposed hooks for a method, field or class, in the shapes jadx-gui's snippets use.
 import type { NodeInfo } from "$lib/engine";
+import { originalMember, ownerOf } from "./ids";
 
 /** `com/foo/Bar$Inner` as Java.use wants it: `com.foo.Bar$Inner`. */
 const javaName = (classId: string) => classId.replaceAll("/", ".");
@@ -10,8 +11,6 @@ function varName(classId: string): string {
   return /^\d/.test(last) || !last ? `C${last}` : last;
 }
 
-/** The declaring class of a member id: everything before the first dot. */
-export const ownerOf = (id: string) => (id.includes(".") ? id.slice(0, id.indexOf(".")) : id);
 
 /**
  * Parameter names from a method's declaration line, e.g. `verify(String owner, String key)`.
@@ -55,7 +54,9 @@ export function fridaSnippet(node: NodeInfo, declLine?: string): string {
   const use = `let ${v} = Java.use("${javaName(owner)}");`;
   if (node.kind === "class") return use;
   if (node.kind === "field") {
-    return `${use}\nconsole.log(\`${v}.${node.name} = \${${v}._${node.name}.value}\`);`;
+    // Frida needs the original name. A method of the same name would make it `_name`.
+    const field = originalMember(node.id);
+    return `${use}\nconsole.log(\`${v}.${field} = \${${v}.${field}.value}\`);`;
   }
   const raw = node.id.slice(node.id.indexOf(".") + 1, node.id.indexOf("("));
   const isInit = raw === "<init>";
@@ -99,8 +100,10 @@ export function xposedSnippet(node: NodeInfo): string {
   const cls = javaName(owner);
   if (node.kind === "class") return `Class<?> ${varName(owner)} = XposedHelpers.findClass("${cls}", classLoader);`;
   if (node.kind === "field") {
-    const get = node.static ? `XposedHelpers.getStaticObjectField(XposedHelpers.findClass("${cls}", classLoader), "${node.name}")` : `XposedHelpers.getObjectField(obj, "${node.name}")`;
-    return `Object ${node.name} = ${get};`;
+    // Xposed looks fields up by their original name.
+    const field = originalMember(node.id);
+    const get = node.static ? `XposedHelpers.getStaticObjectField(XposedHelpers.findClass("${cls}", classLoader), "${field}")` : `XposedHelpers.getObjectField(obj, "${field}")`;
+    return `Object ${field} = ${get};`;
   }
   const raw = node.id.slice(node.id.indexOf(".") + 1, node.id.indexOf("("));
   if (raw === "<clinit>") return "// Static initialisers run before a hook can be installed.";

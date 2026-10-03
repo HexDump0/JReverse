@@ -1,5 +1,10 @@
+<script lang="ts" module>
+  // Module-wide, so a remounted panel never reuses the ticket of a search still running.
+  let tickets = 0;
+</script>
+
 <script lang="ts">
-  // Search across the whole file: class and member names, decompiled code, string literals.
+  // Search across the whole file: class and member names, decompiled code, string literals, files.
   import { tick } from "svelte";
   import { cancelJob, errorMessage, isFileHit, isNameHit, onEngineProgress, search, type CodeHit, type FileHit, type SearchHit, type SearchResult, type SearchScope } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
@@ -26,7 +31,6 @@
   let result = $state<SearchResult | null>(null);
   let error = $state("");
   let searched = $state("");
-  let n = 0;
 
   export async function focusSearch(text?: string) {
     if (text) query = text;
@@ -38,7 +42,11 @@
     const off = onEngineProgress((p) => {
       if (running && p.ticket === running.ticket) running = { ...running, done: p.done, total: p.total };
     });
-    return () => void off.then((f) => f());
+    return () => {
+      void off.then((f) => f());
+      // Leaving the panel ends its search; nothing would show the result.
+      if (running) cancelJob(running.ticket).catch(() => {});
+    };
   });
 
   async function run() {
@@ -46,7 +54,7 @@
     const chosen = SCOPES.filter((s) => scopes[s.id]).map((s) => s.id);
     if (!q || !chosen.length) return;
     if (running) await cancelJob(running.ticket).catch(() => {});
-    const ticket = `search-${++n}`;
+    const ticket = `search-${++tickets}`;
     running = { ticket, done: 0, total: 0 };
     error = "";
     try {

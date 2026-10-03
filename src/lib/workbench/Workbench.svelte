@@ -22,7 +22,8 @@
   import SearchPanel from "./SearchPanel.svelte";
   import UsagesPanel from "./UsagesPanel.svelte";
   import { enclosing, linkAt, wordAt, type Link, type Pos, type View } from "./doc";
-  import { fridaSnippet, ownerOf, xposedSnippet } from "./hooks";
+  import { fridaSnippet, xposedSnippet } from "./hooks";
+  import { originalMember, ownerOf } from "./ids";
   import { dotted, simpleName, type Tab, type Workspace } from "./workspace.svelte";
 
   let {
@@ -151,7 +152,7 @@
       say("Constructors take the name of their class; rename the class instead");
       return;
     }
-    const original = node.kind === "class" ? simpleName(node.id) : node.id.slice(node.id.indexOf(".") + 1).split(/[(:]/)[0];
+    const original = node.kind === "class" ? simpleName(node.id) : originalMember(node.id);
     prompt = {
       title: `Rename ${node.kind} ${node.name}${node.name !== original ? ` (originally ${original})` : ""}`,
       value: ws.project.renames[node.id] ?? node.name,

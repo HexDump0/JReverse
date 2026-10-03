@@ -95,6 +95,14 @@ describe("smaliDoc", () => {
     expect(ids(5)).toEqual([]);
   });
 
+  it("gives inner classes' members their own class", () => {
+    const src = [".class public La/B;", ".method public run()V", ".end method", ".class La/B$Inner;", ".method public run()V", ".field x:I"].join("\n");
+    const doc = smaliDoc("a/B", src, 1, known);
+    expect(doc.decls.get("a/B.run()V")?.line).toBe(1);
+    expect(doc.decls.get("a/B$Inner.run()V")?.line).toBe(4);
+    expect(doc.decls.get("a/B$Inner.x:I")?.line).toBe(5);
+  });
+
   it("links jadx's JVM bytecode listing too", () => {
     const src = ["    invokevirtual a/C go (I)V", "    getfield a/B count I", "    new a/C"].join("\n");
     const doc = smaliDoc("a/B", src, 1, known);

@@ -24,7 +24,7 @@ import {
 import { say, setTask } from "$lib/status.svelte";
 import { enclosing, findDecl, hexDoc, javaDoc, plainDoc, smaliDoc, xmlDoc, type Doc, type Pos, type View } from "./doc";
 import { fmtN, fmtSize } from "$lib/format";
-import { ownerOf } from "./hooks";
+import { dotted, ownerOf, simpleName } from "./ids";
 import { buildTree, type Pkg } from "./tree";
 import type { Reveal } from "./CodeView.svelte";
 
@@ -72,11 +72,7 @@ const OVERVIEW = "overview";
 const MANIFEST = "manifest";
 const empty = (): Project => ({ renames: {}, comments: {}, bookmarks: [] });
 
-export const dotted = (id: string) => id.replaceAll("/", ".");
-export const simpleName = (id: string) => {
-  const s = id.slice(id.lastIndexOf("/") + 1);
-  return s.slice(s.lastIndexOf("$") + 1);
-};
+export { dotted, simpleName } from "./ids";
 
 export class Workspace {
   readonly path: string;

@@ -1,8 +1,8 @@
 <script lang="ts">
   // What you've added to this file: renames, comments and bookmarks. Saved with the file.
   import Icon from "$lib/Icon.svelte";
-  import { ownerOf } from "./hooks";
-  import { dotted, simpleName, type Workspace } from "./workspace.svelte";
+  import { dotted, originalMember, ownerOf, simpleName } from "./ids";
+  import type { Workspace } from "./workspace.svelte";
 
   interface Props {
     ws: Workspace;
@@ -18,9 +18,7 @@
 
   /** `com/foo/Bar.run(I)V` as `Bar.run`, the original names. */
   function original(id: string): string {
-    if (!id.includes(".")) return simpleName(id);
-    const member = id.slice(id.indexOf(".") + 1);
-    return `${simpleName(ownerOf(id))}.${member.split(/[(:]/)[0]}`;
+    return id.includes(".") ? `${simpleName(ownerOf(id))}.${originalMember(id)}` : simpleName(id);
   }
 
   function forget(kind: "renames" | "comments", id: string) {
