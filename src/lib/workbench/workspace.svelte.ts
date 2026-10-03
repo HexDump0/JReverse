@@ -190,7 +190,7 @@ export class Workspace {
     if (!text) return null;
     const entry = this.docs.get(MANIFEST);
     if (entry?.state === "ready") return entry.doc;
-    const doc = xmlDoc(text);
+    const doc = xmlDoc(text, this.info?.android?.package, (id) => this.byId.has(id));
     this.docs.set(MANIFEST, { state: "ready", doc });
     return doc;
   }

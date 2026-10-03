@@ -153,8 +153,33 @@ export function smaliDoc(cls: string, source: string, ms: number, known: (id: st
 
 const simple = (id: string) => id.slice(id.lastIndexOf("/") + 1);
 
-export function xmlDoc(source: string): Doc {
-  return { ...base(source, highlightXml(source)), warnings: 0, ms: 0, engine: "xml" };
+const CLASS_ATTR = /android:(?:name|targetActivity)="([\w.$]+)"/g;
+
+/**
+ * The decoded AndroidManifest.xml. Component and application class names link
+ * to their classes; `pkg` resolves the short `.MainActivity` form.
+ */
+export function xmlDoc(source: string, pkg: string | undefined, known: (id: string) => boolean): Doc {
+  const doc: Doc = { ...base(source, highlightXml(source)), warnings: 0, ms: 0, engine: "xml" };
+  const index = new Map<string, number>();
+  doc.lines.forEach((text, line) => {
+    CLASS_ATTR.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = CLASS_ATTR.exec(text))) {
+      const name = m[1];
+      const full = name.startsWith(".") && pkg ? pkg + name : !name.includes(".") && pkg ? `${pkg}.${name}` : name;
+      const id = full.replaceAll(".", "/");
+      if (!known(id)) continue;
+      let n = index.get(id);
+      if (n === undefined) {
+        n = doc.nodes.length;
+        index.set(id, n);
+        doc.nodes.push({ kind: "class", id, top: id, name: simple(id), detail: full, access: "", static: false });
+      }
+      doc.links[line].push({ col: m.index + m[0].indexOf('"') + 1, len: name.length, node: n, decl: false });
+    }
+  });
+  return doc;
 }
 
 export interface Seg {
