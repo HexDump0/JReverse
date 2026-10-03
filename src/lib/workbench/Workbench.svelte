@@ -5,7 +5,7 @@
   import { tick, untrack } from "svelte";
   import { open as pickPath, save as pickSave } from "@tauri-apps/plugin-dialog";
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
-  import { cancelJob, errorMessage, exportSources, isNameHit, onEngineProgress, writeTextFile, type NodeInfo, type SearchHit, type Usage } from "$lib/engine";
+  import { cancelJob, errorMessage, exportSources, isFileHit, isNameHit, onEngineProgress, writeTextFile, type NodeInfo, type SearchHit, type Usage } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
   import { fmtN, fmtSize } from "$lib/format";
   import { say, setTask } from "$lib/status.svelte";
@@ -305,6 +305,7 @@
 
   function openHit(h: SearchHit) {
     if (isNameHit(h)) ws.openClass(h.node.top, { view: "java", node: h.node.id });
+    else if (isFileHit(h)) ws.openFile(h.path, { pos: { line: h.line, col: h.col }, mark: true });
     else ws.openClass(h.cls, { view: "java", pos: { line: h.line, col: h.col }, mark: true });
   }
 

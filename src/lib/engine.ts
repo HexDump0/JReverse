@@ -65,7 +65,7 @@ export interface Usage {
   in?: NodeInfo;
 }
 
-export type SearchScope = "classes" | "members" | "code" | "strings";
+export type SearchScope = "classes" | "members" | "code" | "strings" | "files";
 
 export interface NameHit {
   type: "class" | "method" | "field";
@@ -83,9 +83,20 @@ export interface CodeHit {
   text: string;
 }
 
-export type SearchHit = NameHit | CodeHit;
+/** A line in a resource or other text file. */
+export interface FileHit {
+  type: "file";
+  path: string;
+  line: number;
+  col: number;
+  len: number;
+  text: string;
+}
+
+export type SearchHit = NameHit | CodeHit | FileHit;
 
 export const isNameHit = (h: SearchHit): h is NameHit => "node" in h;
+export const isFileHit = (h: SearchHit): h is FileHit => h.type === "file";
 
 export interface SearchResult {
   hits: SearchHit[];

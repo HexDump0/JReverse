@@ -1,7 +1,7 @@
 <script lang="ts">
   // Search across the whole file: class and member names, decompiled code, string literals.
   import { tick } from "svelte";
-  import { cancelJob, errorMessage, isNameHit, onEngineProgress, search, type CodeHit, type SearchHit, type SearchResult, type SearchScope } from "$lib/engine";
+  import { cancelJob, errorMessage, isFileHit, isNameHit, onEngineProgress, search, type CodeHit, type FileHit, type SearchHit, type SearchResult, type SearchScope } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
   import { fmtN } from "$lib/format";
   import Snippet from "./Snippet.svelte";
@@ -14,13 +14,14 @@
     { id: "members", label: "Members" },
     { id: "code", label: "Code" },
     { id: "strings", label: "Strings" },
+    { id: "files", label: "Files" },
   ];
 
   let input = $state<HTMLInputElement>();
   let query = $state("");
   let regex = $state(false);
   let caseSensitive = $state(false);
-  let scopes = $state<Record<SearchScope, boolean>>({ classes: true, members: true, code: false, strings: true });
+  let scopes = $state<Record<SearchScope, boolean>>({ classes: true, members: true, code: false, strings: true, files: true });
   let running = $state<{ ticket: string; done: number; total: number } | null>(null);
   let result = $state<SearchResult | null>(null);
   let error = $state("");
@@ -69,9 +70,15 @@
   const names = $derived((result?.hits ?? []).filter(isNameHit));
   const code = $derived.by(() => {
     const m = new Map<string, CodeHit[]>();
-    for (const h of result?.hits ?? []) if (!isNameHit(h)) m.set(h.cls, [...(m.get(h.cls) ?? []), h]);
+    for (const h of result?.hits ?? []) if (!isNameHit(h) && !isFileHit(h)) m.set(h.cls, [...(m.get(h.cls) ?? []), h]);
     return [...m.entries()];
   });
+  const inFiles = $derived.by(() => {
+    const m = new Map<string, FileHit[]>();
+    for (const h of result?.hits ?? []) if (isFileHit(h)) m.set(h.path, [...(m.get(h.path) ?? []), h]);
+    return [...m.entries()];
+  });
+  const fileCount = $derived(inFiles.reduce((k, [, hits]) => k + hits.length, 0));
   const codeCount = $derived(code.reduce((k, [, hits]) => k + hits.length, 0));
 
   function onkeydown(e: KeyboardEvent) {
@@ -144,6 +151,18 @@
       <div class="sec">Code <span class="n">{fmtN(codeCount)}</span></div>
       {#each code as [cls, hits] (cls)}
         <div class="cls" title={dotted(cls)}>{ws.className(cls)}</div>
+        {#each hits as h (h.line)}
+          <button class="hit" onclick={() => onopen(h)}>
+            <span class="line">{h.line + 1}</span>
+            <Snippet text={h.text} col={h.col} len={h.len} />
+          </button>
+        {/each}
+      {/each}
+    {/if}
+    {#if inFiles.length}
+      <div class="sec">Files <span class="n">{fmtN(fileCount)}</span></div>
+      {#each inFiles as [path, hits] (path)}
+        <div class="cls" title={path}>{path.slice(path.lastIndexOf("/") + 1)}<span class="dir">{path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ""}</span></div>
         {#each hits as h (h.line)}
           <button class="hit" onclick={() => onopen(h)}>
             <span class="line">{h.line + 1}</span>
@@ -279,6 +298,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .dir {
+    margin-left: 8px;
+    font: 400 11px var(--font-code);
+    color: var(--faint);
   }
   .hit {
     display: flex;
