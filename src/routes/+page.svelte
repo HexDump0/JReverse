@@ -28,7 +28,8 @@
   import Palette, { type PaletteItem } from "$lib/shell/Palette.svelte";
   import StartScreen from "$lib/start/StartScreen.svelte";
   import Onboarding, { onboarded } from "$lib/start/Onboarding.svelte";
-  import Workbench, { type Workspace } from "$lib/Workbench.svelte";
+  import Workbench from "$lib/workbench/Workbench.svelte";
+  import { Workspace } from "$lib/workbench/workspace.svelte";
 
   const MAX_LOG = 500;
   /** `VITE_FIRST_RUN=1` shows onboarding on every launch and hides recent files, as a new user sees it. */
@@ -111,8 +112,11 @@
         closeSession(opened.session).catch(() => {});
         return;
       }
-      if (ws) closeSession(ws.opened.session).catch(() => {});
-      ws = { path, name, opened, classes };
+      if (ws) {
+        await ws.save();
+        closeSession(ws.session).catch(() => {});
+      }
+      ws = new Workspace(path, name, opened, classes);
       readout = null;
       say(`Opened ${name} in ${opened.ms} ms`);
     } catch (e) {
@@ -136,11 +140,13 @@
     say(`Cancelled opening ${name}`);
   }
 
-  function closeFile() {
+  async function closeFile() {
     if (!ws) return;
-    closeSession(ws.opened.session).catch(() => {});
-    say(`Closed ${ws.name}`);
+    const closing = ws;
     ws = null;
+    await closing.save();
+    closeSession(closing.session).catch(() => {});
+    say(`Closed ${closing.name}`);
     refreshRecents();
   }
 
@@ -180,36 +186,33 @@
   }
 
   /* ---------- menus, palette, keys ---------- */
-  const menus = $derived<Menu[]>([
-    {
+  const menus = $derived.by<Menu[]>(() => {
+    const file: Menu = {
       label: "File",
       items: [
         { label: "Open file", key: "Ctrl O", run: browse },
-        { label: "Close file", key: "Ctrl W", disabled: !ws, run: closeFile },
+        ...(ws && workbench ? workbench.fileItems() : []),
+        { label: "Close file", key: "Ctrl Shift W", disabled: !ws, run: closeFile },
         { label: "Clear recent files", disabled: !!ws || recents.length < 2, run: clearRecents },
       ],
-    },
-    {
-      label: "View",
-      items: [
-        { label: "Go to anything", key: "Ctrl P", run: () => (paletteOpen = true) },
-        { label: logOpen ? "Hide log" : "Show log", run: () => (logOpen = !logOpen) },
-      ],
-    },
-  ]);
+    };
+    const always = [
+      { label: "Go to anything", key: "Ctrl P", run: () => (paletteOpen = true) },
+      { label: logOpen ? "Hide log" : "Show log", run: () => (logOpen = !logOpen) },
+    ];
+    if (ws && workbench) {
+      const more = workbench.menus();
+      const view = more.find((m) => m.label === "View");
+      if (view) view.items = [...always, ...view.items];
+      return [file, ...more];
+    }
+    return [file, { label: "View", items: always }];
+  });
 
   const paletteItems = $derived.by((): PaletteItem[] => {
     const items: PaletteItem[] = [];
-    if (ws) {
-      for (const c of ws.classes) {
-        const i = c.id.lastIndexOf("/");
-        items.push({
-          section: "Classes",
-          label: c.id.slice(i + 1),
-          sub: i > 0 ? c.id.slice(0, i).replaceAll("/", ".") : "",
-          run: () => workbench?.show(c.id),
-        });
-      }
+    if (ws && workbench) {
+      items.push(...workbench.paletteItems());
     } else {
       for (const r of recents) {
         if (r.missing) continue;
@@ -218,7 +221,11 @@
     }
     const act = (label: string, sub: string, run: () => void) => items.push({ section: "Actions", label, sub, action: true, run });
     act("Open file", "Ctrl O", browse);
-    if (ws) act("Close file", "Ctrl W", closeFile);
+    if (ws && workbench) {
+      for (const m of workbench.menus()) for (const it of m.items) if (!it.disabled) act(it.label, it.key ?? "", it.run);
+      for (const it of workbench.fileItems()) if (!it.disabled) act(it.label, it.key ?? "", it.run);
+      act("Close file", "Ctrl Shift W", closeFile);
+    }
     else if (recents.length > 1) act("Clear recent files", "", clearRecents);
     act(logOpen ? "Hide log" : "Show log", "", () => (logOpen = !logOpen));
     return items;
@@ -230,7 +237,7 @@
     const inInput = e.target instanceof HTMLInputElement;
     if (key === "o") browse();
     else if (key === "p") paletteOpen = !opening;
-    else if (key === "w" && ws) closeFile();
+    else if (key === "w" && e.shiftKey && ws) closeFile();
     else if (key === "z" && !inInput && !ws) undo();
     else return;
     e.preventDefault();
@@ -272,7 +279,9 @@
   {#if onboarding}
     <Onboarding onfinish={() => (onboarding = false)} />
   {:else if ws}
-    <Workbench {ws} bind:this={workbench} />
+    {#key ws}
+      <Workbench {ws} {home} bind:this={workbench} />
+    {/key}
   {:else}
     <StartScreen
       recents={FIRST_RUN ? [] : recents}
@@ -307,8 +316,9 @@
 {#if paletteOpen}
   <Palette
     items={paletteItems}
-    placeholder={ws ? "Go to a class, or type > for actions" : "Open a recent file, or type > for actions"}
+    placeholder={ws ? "Go to a class, @ for a member, : for a line, > for actions" : "Open a recent file, or type > for actions"}
     onclose={() => (paletteOpen = false)}
+    ongotoline={ws ? (n) => workbench?.jumpToLine(n) : undefined}
   />
 {/if}
 

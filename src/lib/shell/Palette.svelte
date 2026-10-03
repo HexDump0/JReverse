@@ -5,7 +5,24 @@
     sub?: string;
     /** Shown alone when the query starts with `>`. */
     action?: boolean;
+    /** A member of the open class; shown alone when the query starts with `@`. */
+    member?: boolean;
     run: () => void;
+  }
+
+  /**
+   * How well `label` matches a lowercase query: exact, prefix, camel-case
+   * initials (`lc` for LicenseCheck), substring; -1 for no match.
+   */
+  export function score(label: string, q: string): number {
+    const l = label.toLowerCase();
+    if (l === q) return 0;
+    if (l.startsWith(q)) return 1;
+    // The first letter plus every capital: LicenseCheck is "lc".
+    const initials = (label.slice(0, 1) + label.slice(1).replace(/[^A-Z0-9]/g, "")).toLowerCase();
+    if (q.length > 1 && initials.startsWith(q)) return 2;
+    if (l.includes(q)) return 3;
+    return -1;
   }
 </script>
 
@@ -18,24 +35,36 @@
     items,
     placeholder,
     onclose,
-  }: { items: PaletteItem[]; placeholder: string; onclose: () => void } = $props();
+    ongotoline,
+  }: { items: PaletteItem[]; placeholder: string; onclose: () => void; /** Enables `:123`. */ ongotoline?: (line: number) => void } = $props();
 
   let query = $state("");
   let sel = $state(0);
   let input: HTMLInputElement;
   let list: HTMLDivElement;
 
-  const shown = $derived.by(() => {
-    const actionsOnly = query.startsWith(">");
-    const q = query.replace(/^>/, "").trim().toLowerCase();
-    const out: PaletteItem[] = [];
-    for (const it of items) {
-      if (actionsOnly && !it.action) continue;
-      if (q && !it.label.toLowerCase().includes(q) && !it.sub?.toLowerCase().includes(q)) continue;
-      out.push(it);
-      if (out.length === MAX_SHOWN) break;
+  const shown = $derived.by((): PaletteItem[] => {
+    const line = /^:(\d+)$/.exec(query.trim());
+    if (line && ongotoline) {
+      const n = Number(line[1]);
+      return [{ section: "Go to line", label: `Line ${n}`, run: () => ongotoline(n) }];
     }
-    return out;
+    const mode = query[0] === ">" ? "action" : query[0] === "@" ? "member" : "";
+    const q = (mode ? query.slice(1) : query).trim().toLowerCase();
+    const ranked: [number, number, PaletteItem][] = [];
+    items.forEach((it, i) => {
+      if (mode === "action" && !it.action) return;
+      if (mode === "member" && !it.member) return;
+      if (!mode && it.member) return;
+      let s = q ? score(it.label, q) : 0;
+      if (s < 0 && it.sub?.toLowerCase().includes(q)) s = 4;
+      if (s >= 0) ranked.push([s, i, it]);
+    });
+    // Sections stay together; within one, better matches first.
+    const order = new Map<string, number>();
+    for (const [, , it] of ranked) if (!order.has(it.section)) order.set(it.section, order.size);
+    ranked.sort((a, b) => order.get(a[2].section)! - order.get(b[2].section)! || a[0] - b[0] || a[1] - b[1]);
+    return ranked.slice(0, MAX_SHOWN).map(([, , it]) => it);
   });
 
   $effect(() => {

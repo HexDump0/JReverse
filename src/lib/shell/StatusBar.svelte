@@ -9,6 +9,7 @@
   <span class="msg" class:err={status.error}>{status.message}</span>
   <span class="r">
     {@render children?.()}
+    {#each status.where as part (part)}<span class="where">{part}</span>{/each}
     {#if status.task}
       <span class="task"><i class="spin"></i><span>{status.task}</span></span>
     {/if}
@@ -45,6 +46,11 @@
     align-items: center;
     gap: 4px;
     margin-left: auto;
+  }
+  .where {
+    padding: 0 8px;
+    color: var(--faint);
+    font-variant-numeric: tabular-nums;
   }
   .task {
     display: flex;
