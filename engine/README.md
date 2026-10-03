@@ -18,34 +18,73 @@ The runtime's modules come from `jdeps --list-deps`, plus `extraModules`
 the smoke test fails with `NoClassDefFoundError`, a module is missing: adjust
 those lists in `build.gradle.kts`.
 
-## Protocol (version 1)
+## Protocol (version 2)
 
 One compact JSON object per line. stdout carries protocol messages only;
 logs go to stderr. The engine exits on `shutdown` or when stdin closes.
 
 ```jsonc
-← {"method":"ready","params":{"protocol":1,"version":"0.1.0","engines":["jadx"]}}
+← {"method":"ready","params":{"protocol":2,"version":"0.1.0","engines":["jadx"]}}
 → {"id":1,"method":"open","params":{"path":"/x/app.apk"}}
 ← {"id":1,"result":{"session":"s1","kind":"apk","classCount":4812,"ms":1339}}
 → {"id":2,"method":"decompile","params":{"session":"s1","class":"a/b"}}
 ← {"id":2,"error":{"code":"NO_CLASS","message":"class not found: a/b"}}
+← {"method":"progress","params":{"ticket":"t1","done":38,"total":146}}
 ```
 
 | Method | Params | Result |
 |---|---|---|
 | `open` | `path` | `session`, `kind` (`apk` `aar` `jar` `dex` `class`), `classCount`, `ms` |
 | `listClasses` | `session` | `[{id, kind}]`, top-level classes sorted by id |
-| `decompile` | `session`, `class`, `engine`? (default `jadx`) | `source`, `engine`, `ms`, `warnings` |
+| `decompile` | `session`, `class`, `engine`? (default `jadx`) | `source`, `engine`, `ms`, `warnings`, `links`, `decls`, `nodes` |
+| `smali` | `session`, `class` | `source` (smali for DEX, JVM bytecode for class files), `ms` |
+| `node` | `session`, `node` | a node (below) |
+| `usages` | `session`, `node` | `usages: [{cls, line, col, len, text, in?}]`, `ms` |
+| `search` | `session`, `query`, `regex`?, `caseSensitive`?, `scopes`?, `limit`? (1000), `ticket`? | `hits`, `truncated`, `searched`, `ms` |
+| `export` | `session`, `dir`, `ticket`? | `dir`, `written`, `failed`, `ms` |
+| `cancel` | `ticket` | `cancelled`: whether a job with that ticket was running |
+| `overview` | `session` | see below |
+| `setCodeData` | `session`, `renames`? `{node: name}`, `comments`? `{node: text}` | `applied`. Replaces all earlier ones. |
 | `close` | `session` | `{}` |
 | `shutdown` | | `{}`, then exit |
 
-Class ids are original internal names (`com/foo/Bar`) and never change on
-rename. `kind` is one of `class` `interface` `enum` `annotation` `record`.
+**Ids.** Classes are original internal names (`com/foo/Bar`, inner classes
+`com/foo/Bar$Inner`), methods `com/foo/Bar.run(I)V`, fields
+`com/foo/Bar.count:I`. They never change on rename. Class `kind` is one of
+`class` `interface` `enum` `annotation` `record`.
+
+**Nodes** are `{kind, id, top, name, detail, access, static, frida?}`: `kind` is
+`class` `method` `field`; `top` is the top-level class whose source declares it;
+`name` and `detail` (`run(int): void`) reflect renames; `frida` lists a method's
+argument types the way Frida's `overload()` wants them.
+
+**Links.** `decompile` returns `links` (every identifier that names a class,
+method or field) and `decls` (the declarations among them) as flat arrays of
+four numbers per span: 0-based line, column (UTF-16 units), length, index
+into `nodes`.
+
+**Search** scopes are `classes`, `members`, `code` and `strings` (code
+matches inside string literals); all four when omitted. Code hits are
+`{type: "code"|"string", cls, line, col, len, text}`, one per line; name hits
+are `{type: "class"|"method"|"field", cls, node}`. Searching code decompiles
+every class once, so the first search of a big APK takes a while; it sends
+`progress` notifications when given a `ticket`, and `cancel` stops it with a
+`CANCELLED` error. `export` works the same way.
+
+**Overview** has `path`, `kind`, `size`, `classes`, `methods`, `fields`;
+for archives `files`, `dex`, `nativeLibs: [{abi, name, size}]`,
+`javaVersions: [{java, classes}]`, `jarManifest`, and `signing: {schemes,
+certs}` (v1 signature files and the v2/v3 signing block, read but not
+verified); for APK/AAR the decoded `manifest` and `android` (package,
+versions, SDKs, permissions, application flags and `components` with
+`exported`, `launcher`, intent actions and deep `links`).
+
 Requests are answered on a thread pool, so responses can arrive out of order.
 
 Error codes: `BAD_REQUEST`, `UNKNOWN_METHOD`, `NO_SESSION`, `NO_CLASS`,
-`NO_ENGINE`, `UNSUPPORTED_INPUT`, `OPEN_FAILED`, `DECOMPILE_FAILED`,
-`INTERNAL`. Malformed requests get an error with `"id": null`.
+`NO_ENGINE`, `NO_NODE`, `UNSUPPORTED_INPUT`, `OPEN_FAILED`,
+`DECOMPILE_FAILED`, `EXPORT_FAILED`, `CANCELLED`, `INTERNAL`. Malformed
+requests get an error with `"id": null`.
 
 Bump `Version.PROTOCOL` (and `PROTOCOL` in `src-tauri/src/engine/process.rs`)
 on any incompatible change.
