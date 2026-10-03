@@ -7,7 +7,7 @@
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { cancelJob, errorMessage, exportSources, isNameHit, onEngineProgress, writeTextFile, type NodeInfo, type SearchHit, type Usage } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
-  import { fmtN } from "$lib/format";
+  import { fmtN, fmtSize } from "$lib/format";
   import { say, setTask } from "$lib/status.svelte";
   import type { Menu, MenuItem } from "$lib/shell/AppBar.svelte";
   import ContextMenu from "$lib/shell/ContextMenu.svelte";
@@ -15,6 +15,7 @@
   import type { PaletteItem } from "$lib/shell/Palette.svelte";
   import ClassTree from "./ClassTree.svelte";
   import CodeView from "./CodeView.svelte";
+  import FilesPanel from "./FilesPanel.svelte";
   import NotesPanel from "./NotesPanel.svelte";
   import Outline from "./Outline.svelte";
   import OverviewPage from "./OverviewPage.svelte";
@@ -26,7 +27,7 @@
 
   let { ws, home }: { ws: Workspace; home: string | null } = $props();
 
-  type Side = "classes" | "search" | "notes";
+  type Side = "classes" | "files" | "search" | "notes";
   const PREFS = "jreverse.workbench";
   const IDENT = /^[A-Za-z_$][\w$]*$/;
 
@@ -387,6 +388,7 @@
         label: "View",
         items: [
           { label: "Classes", run: focusClasses },
+          { label: "Files", run: () => (side = "files") },
           { label: "Notes", run: () => (side = "notes") },
           { label: prefs.outline ? "Hide outline" : "Show outline", run: () => (prefs.outline = !prefs.outline) },
           { label: "Bigger text", key: "Ctrl =", run: () => zoom(1) },
@@ -504,9 +506,13 @@
     if (tab.kind === "class" && doc) untrack(() => tick().then(() => code?.focusCode()));
   });
 
+  const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+  let imageSize = $state("");
+
   function tabLabel(t: Tab): string {
     if (t.kind === "overview") return "Overview";
     if (t.kind === "manifest") return "AndroidManifest.xml";
+    if (t.kind === "file") return fileName(t.path!);
     return ws.className(t.cls!);
   }
 </script>
@@ -517,6 +523,7 @@
   <aside class="side">
     <div class="modes" role="tablist">
       <button role="tab" aria-selected={side === "classes"} class:on={side === "classes"} onclick={() => (side = "classes")}>Classes</button>
+      <button role="tab" aria-selected={side === "files"} class:on={side === "files"} onclick={() => (side = "files")}>Files</button>
       <button role="tab" aria-selected={side === "search"} class:on={side === "search"} onclick={() => openSearch(false)}>Search</button>
       <button role="tab" aria-selected={side === "notes"} class:on={side === "notes"} onclick={() => (side = "notes")}>
         Notes{#if Object.keys(ws.project.renames).length + Object.keys(ws.project.comments).length + ws.project.bookmarks.length}<span class="badge">{Object.keys(ws.project.renames).length + Object.keys(ws.project.comments).length + ws.project.bookmarks.length}</span>{/if}
@@ -548,6 +555,8 @@
       {#key ws}
         <ClassTree bind:this={tree} {ws} {filter} current={tab.cls} onopen={(cls) => ws.openClass(cls)} oncontext={onTreeContext} />
       {/key}
+    {:else if side === "files"}
+      <FilesPanel {ws} current={tab.path} onopen={(p) => ws.openFile(p)} />
     {:else if side === "search"}
       <SearchPanel bind:this={searchPanel} {ws} onopen={openHit} />
     {:else}
@@ -566,7 +575,7 @@
           role="tab"
           tabindex="-1"
           aria-selected={t.key === ws.activeKey}
-          title={t.cls ? dotted(t.cls) : ""}
+          title={t.cls ? dotted(t.cls) : (t.path ?? "")}
           onclick={() => ws.activate(t.key)}
           onkeydown={() => {}}
           onauxclick={(e) => e.button === 1 && ws.closeTab(t.key)}
@@ -591,6 +600,10 @@
         <div class="crumbs">
           {#if tab.kind === "manifest"}
             <span class="cn">AndroidManifest.xml</span>
+          {:else if tab.kind === "file"}
+            {#if tab.path!.includes("/")}<span class="pk">{tab.path!.slice(0, tab.path!.lastIndexOf("/"))}</span>{/if}
+            <span class="cn">{fileName(tab.path!)}</span>
+            {#if entry?.state === "ready" && entry.note}<span class="note">{entry.note}</span>{/if}
           {:else}
             {#if pkg}<span class="pk">{pkg}</span>{/if}
             <span class="cn">{ws.className(tab.cls!)}</span>
@@ -620,16 +633,21 @@
                 <Outline {doc} caret={tab.caret} onjump={jump} />
               </aside>
             {/if}
+          {:else if entry?.state === "image"}
+            <div class="image">
+              <img src={entry.src} alt={fileName(tab.path ?? "")} onload={(e) => (imageSize = `${(e.currentTarget as HTMLImageElement).naturalWidth} x ${(e.currentTarget as HTMLImageElement).naturalHeight}`)} />
+              <p>{imageSize}<span class="dim">{fmtSize(entry.size)}</span></p>
+            </div>
           {:else if entry?.state === "error"}
             <div class="state err">
-              <p>Couldn't decompile {ws.className(tab.cls ?? "")}</p>
+              <p>Couldn't {tab.kind === "file" ? "read" : "decompile"} {tab.kind === "file" ? fileName(tab.path ?? "") : ws.className(tab.cls ?? "")}</p>
               <pre>{entry.message}</pre>
               {#each views.filter((v) => v.view !== tab.view) as v (v.view)}
                 <button class="lnk" onclick={() => ws.setView(v.view)}>Show {v.label} instead</button>
               {/each}
             </div>
           {:else}
-            <div class="state"><i class="spin"></i>Decompiling {ws.className(tab.cls ?? "")}</div>
+            <div class="state"><i class="spin"></i>{tab.kind === "file" ? `Reading ${fileName(tab.path ?? "")}` : `Decompiling ${ws.className(tab.cls ?? "")}`}</div>
           {/if}
         </div>
       {/if}
@@ -954,5 +972,37 @@
   .usages {
     flex: none;
     min-height: 0;
+  }
+  .note {
+    font-size: 12px;
+    color: var(--obf);
+  }
+  .image {
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 32px;
+  }
+  .image img {
+    max-width: 100%;
+    max-height: calc(100% - 40px);
+    min-width: 32px;
+    background: var(--shelf);
+    border-radius: 4px;
+  }
+  .image p {
+    display: flex;
+    gap: 12px;
+    margin: 0;
+    font: 12px var(--font-code);
+    color: var(--text-2);
+  }
+  .dim {
+    color: var(--text-3);
   }
 </style>

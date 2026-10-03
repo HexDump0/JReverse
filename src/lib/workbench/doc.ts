@@ -184,6 +184,29 @@ export function xmlDoc(source: string, pkg: string | undefined, known: (id: stri
   return doc;
 }
 
+/** Text with no colouring, e.g. a .properties file. */
+export function plainDoc(source: string): Doc {
+  const lines = source.split("\n");
+  return { ...base(source, lines.map((l) => [["", l.endsWith("\r") ? l.slice(0, -1) : l]])), warnings: 0, ms: 0, engine: "text" };
+}
+
+const hex2 = (b: number) => b.toString(16).padStart(2, "0");
+
+/** A hex dump, 16 bytes a line: offset, bytes, then the printable ones. */
+export function hexDoc(bytes: Uint8Array): Doc {
+  const lines: string[] = [];
+  const tokens: Token[][] = [];
+  for (let at = 0; at < bytes.length; at += 16) {
+    const row = bytes.subarray(at, at + 16);
+    const hex = Array.from(row, hex2).join(" ").padEnd(47, " ");
+    const ascii = Array.from(row, (b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : ".")).join("");
+    const offset = at.toString(16).padStart(8, "0");
+    lines.push(`${offset}  ${hex}  ${ascii}`);
+    tokens.push([["c", offset], ["", `  ${hex}  `], ["s", ascii]]);
+  }
+  return { ...base(lines.join("\n"), tokens), warnings: 0, ms: 0, engine: "hex" };
+}
+
 export interface Seg {
   text: string;
   kind: TokenKind;

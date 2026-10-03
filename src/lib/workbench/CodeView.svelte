@@ -42,6 +42,8 @@
 
   const lh = $derived(Math.round(fontSize * 1.62));
   const digits = $derived(String(doc.lines.length).length);
+  // A hex dump carries its own offsets; line numbers would only repeat them.
+  const numbered = $derived(doc.engine !== "hex");
   const first = $derived(Math.max(0, Math.floor(top / lh) - OVERSCAN));
   const last = $derived(Math.min(doc.lines.length, Math.ceil((top + height) / lh) + OVERSCAN));
   const visible = $derived(Array.from({ length: Math.max(0, last - first) }, (_, i) => first + i));
@@ -149,7 +151,7 @@
     }
   }
 
-  const gutterPx = () => (digits + 3) * fontSize * 0.6;
+  const gutterPx = () => (numbered ? (digits + 3) * fontSize * 0.6 : 0);
 
   $effect(() => {
     const r = reveal;
@@ -321,7 +323,7 @@
     {onkeydown}
     style:--fs="{fontSize}px"
     style:--lh="{lh}px"
-    style:--gw="{digits + 3}ch"
+    style:--gw={numbered ? `${digits + 3}ch` : "0px"}
   >
     <div class="sizer" style:height="{doc.lines.length * lh}px" style:width="calc(var(--gw) + {doc.width + 4}ch + {PAD * 2}px)">
       {#each visible as i (i)}
@@ -333,7 +335,7 @@
           style:top="{i * lh}px"
           data-l={i}
         >
-          <span class="no">{i + 1}</span><span class="tx"
+          {#if numbered}<span class="no">{i + 1}</span>{/if}<span class="tx"
             >{#each segs(i) as s (s.col)}<span
                 class="t{s.kind}"
                 class:lk={!!s.link}

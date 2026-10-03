@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Decompiled } from "$lib/engine";
-import { enclosing, findDecl, javaDoc, linkAt, segments, smaliDoc, wordAt, xmlDoc } from "./doc";
+import { enclosing, findDecl, hexDoc, javaDoc, linkAt, segments, smaliDoc, wordAt, xmlDoc } from "./doc";
 
 const node = (id: string, kind: "class" | "method" | "field", name: string) => ({
   kind,
@@ -138,5 +138,16 @@ describe("findDecl", () => {
     expect(find("field", "a/Vault.entries:Ljava/util/Map;")).toEqual({ line: 1, col: 43 });
     expect(find("class", "a/Vault$Entry")).toEqual({ line: 6, col: 31 });
     expect(find("method", "a/Vault.gone()V")).toBeUndefined();
+  });
+});
+
+describe("hexDoc", () => {
+  it("prints offsets, bytes and printable characters", () => {
+    const doc = hexDoc(new Uint8Array([0x50, 0x4b, 3, 4, ...Array(14).fill(0x41)]));
+    expect(doc.lines).toEqual([
+      "00000000  50 4b 03 04 41 41 41 41 41 41 41 41 41 41 41 41  PK..AAAAAAAAAAAA",
+      "00000010  41 41                                            AA",
+    ]);
+    expect(doc.engine).toBe("hex");
   });
 });

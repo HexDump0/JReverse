@@ -247,6 +247,34 @@ export function setCodeData(session: string, renames: Record<string, string>, co
   return invoke("set_code_data", { session, renames, comments });
 }
 
+export interface FileEntry {
+  path: string;
+  type: "manifest" | "arsc" | "xml" | "image" | "lib" | "font" | "archive" | "text" | "file";
+  /** Bytes, or -1 when unknown (files decoded out of resources.arsc). */
+  size: number;
+}
+
+export interface FileContent {
+  path: string;
+  kind: "text" | "image" | "binary" | "table";
+  size: number;
+  text?: string;
+  /** Base64: the image, or the first 64 KB of a binary file. */
+  data?: string;
+  mime?: string;
+  /** For resources.arsc: the files it decodes to. */
+  children?: string[];
+  truncated: boolean;
+}
+
+export function listFiles(session: string): Promise<{ files: FileEntry[] }> {
+  return invoke("list_files", { session });
+}
+
+export function readFile(session: string, path: string): Promise<FileContent> {
+  return invoke("read_file", { session, path });
+}
+
 export function loadProject(path: string): Promise<Project | null> {
   return invoke("load_project", { path });
 }

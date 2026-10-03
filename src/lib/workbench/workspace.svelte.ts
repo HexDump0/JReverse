@@ -5,6 +5,8 @@ import {
   decompileClass,
   errorMessage,
   findUsages,
+  listFiles,
+  readFile,
   loadProject,
   nodeInfo,
   overview,
@@ -12,6 +14,7 @@ import {
   setCodeData,
   smaliClass,
   type ClassEntry,
+  type FileEntry,
   type NodeInfo,
   type Opened,
   type Overview,
@@ -19,24 +22,31 @@ import {
   type Usage,
 } from "$lib/engine";
 import { say, setTask } from "$lib/status.svelte";
-import { enclosing, findDecl, javaDoc, smaliDoc, xmlDoc, type Doc, type Pos, type View } from "./doc";
+import { enclosing, findDecl, hexDoc, javaDoc, plainDoc, smaliDoc, xmlDoc, type Doc, type Pos, type View } from "./doc";
+import { fmtN, fmtSize } from "$lib/format";
 import { ownerOf } from "./frida";
 import { buildTree, type Pkg } from "./tree";
 import type { Reveal } from "./CodeView.svelte";
 
-export type TabKind = "overview" | "class" | "manifest";
+export type TabKind = "overview" | "class" | "manifest" | "file";
 
 export interface Tab {
   key: string;
   kind: TabKind;
   /** For class tabs. */
   cls?: string;
+  /** For file tabs: the path inside the archive. */
+  path?: string;
   view: View;
   caret: Pos;
   reveal: Reveal | null;
 }
 
-export type DocEntry = { state: "loading" } | { state: "ready"; doc: Doc } | { state: "error"; message: string };
+export type DocEntry =
+  | { state: "loading" }
+  | { state: "ready"; doc: Doc; note?: string }
+  | { state: "image"; src: string; size: number }
+  | { state: "error"; message: string };
 
 interface Loc {
   key: string;
@@ -83,6 +93,9 @@ export class Workspace {
   infoError = $state<string | null>(null);
   /** Bumped whenever renames change, so views that show names recompute. */
   names = $state(0);
+  /** Everything in the archive that isn't code; loaded when the Files panel first opens. */
+  files = $state<FileEntry[] | null>(null);
+  filesError = $state<string | null>(null);
 
   private pending = new Map<string, Promise<Doc>>();
   private revealN = 0;
@@ -151,6 +164,7 @@ export class Workspace {
 
   doc(tab: Tab): DocEntry | undefined {
     if (tab.kind === "manifest") return this.docs.get(MANIFEST);
+    if (tab.kind === "file") return this.docs.get(tab.key);
     return tab.cls ? this.docs.get(this.docKey(tab.cls, tab.view)) : undefined;
   }
 
@@ -199,6 +213,74 @@ export class Workspace {
   /** Makes sure a tab's document is loading or loaded; errors show in the tab. */
   ensure(tab: Tab) {
     if (tab.kind === "class" && tab.cls && !this.doc(tab)) this.loadDoc(tab.cls, tab.view).catch(() => {});
+    if (tab.kind === "file" && tab.path && !this.doc(tab)) this.loadFile(tab.key, tab.path);
+  }
+
+  /* ---------- files ---------- */
+
+  async loadFiles() {
+    if (this.files || this.filesError) return;
+    try {
+      this.files = (await listFiles(this.session)).files;
+    } catch (e) {
+      this.filesError = errorMessage(e);
+    }
+  }
+
+  /**
+   * Opens a file from the archive in a tab. resources.arsc doesn't get one:
+   * its decoded res/values files join the list instead.
+   */
+  async openFile(path: string, o: { pos?: Pos; mark?: boolean } = {}) {
+    if (this.files?.find((f) => f.path === path)?.type === "arsc") return this.expandTable(path);
+    const key = `file:${path}`;
+    if (!this.tabs.some((t) => t.key === key)) {
+      const at = this.tabs.findIndex((t) => t.key === this.activeKey);
+      this.tabs.splice(at < 0 ? this.tabs.length : at + 1, 0, { key, kind: "file", path, view: "java", caret: { line: 0, col: 0 }, reveal: null });
+    }
+    this.activate(key);
+    await this.loadFile(key, path);
+    const tab = this.tabs.find((t) => t.key === key);
+    if (tab && o.pos) this.place(tab, o.pos, o.mark);
+  }
+
+  private async loadFile(key: string, path: string) {
+    if (this.docs.has(key)) return;
+    this.docs.set(key, { state: "loading" });
+    try {
+      const c = await readFile(this.session, path);
+      if (c.kind === "image") {
+        this.docs.set(key, { state: "image", src: `data:${c.mime};base64,${c.data}`, size: c.size });
+      } else if (c.kind === "binary") {
+        const bytes = Uint8Array.from(atob(c.data ?? ""), (ch) => ch.charCodeAt(0));
+        const note = c.truncated ? `First ${fmtSize(bytes.length)} of ${fmtSize(c.size)}` : undefined;
+        this.docs.set(key, { state: "ready", doc: hexDoc(bytes), note });
+      } else if (c.kind === "text") {
+        const text = c.text ?? "";
+        const xml = /\.xml$/i.test(path) || text.startsWith("<?xml");
+        const doc = xml ? xmlDoc(text, this.info?.android?.package, (id) => this.byId.has(id)) : plainDoc(text);
+        this.docs.set(key, { state: "ready", doc, note: c.truncated ? `First ${fmtSize(text.length)}` : undefined });
+      } else {
+        this.docs.delete(key);
+      }
+    } catch (e) {
+      this.docs.set(key, { state: "error", message: errorMessage(e) });
+    }
+  }
+
+  private async expandTable(path: string) {
+    setTask("Decoding resources.arsc");
+    try {
+      const c = await readFile(this.session, path);
+      const have = new Set(this.files?.map((f) => f.path));
+      const added = (c.children ?? []).filter((p) => !have.has(p)).map((p): FileEntry => ({ path: p, type: "xml", size: -1 }));
+      this.files = [...(this.files ?? []), ...added];
+      say(added.length ? `Decoded ${fmtN(added.length)} files from resources.arsc into res/` : "resources.arsc holds no values");
+    } catch (e) {
+      say(`Couldn't decode resources.arsc: ${errorMessage(e)}`, true);
+    } finally {
+      setTask("");
+    }
   }
 
   /* ---------- tabs and navigation ---------- */

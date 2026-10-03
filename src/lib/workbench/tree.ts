@@ -1,25 +1,27 @@
 // The class tree: packages and classes, flattened to the rows that are visible.
+// The Files panel uses it too, with folders and files.
 import type { ClassEntry } from "$lib/engine";
 
-export interface Pkg {
+export interface Pkg<T extends { id: string } = ClassEntry> {
   /** Shown name; middle packages with nothing of their own are merged, as in `com.example.app`. */
   label: string;
   /** `com/example/app`, the key for expanded state. */
   path: string;
-  pkgs: Pkg[];
-  classes: ClassEntry[];
+  pkgs: Pkg<T>[];
+  classes: T[];
   /** Classes in this package and below. */
   total: number;
 }
 
-export type Row =
-  | { type: "pkg"; key: string; depth: number; pkg: Pkg; open: boolean }
-  | { type: "cls"; key: string; depth: number; cls: ClassEntry };
+export type Row<T extends { id: string } = ClassEntry> =
+  | { type: "pkg"; key: string; depth: number; pkg: Pkg<T>; open: boolean }
+  | { type: "cls"; key: string; depth: number; cls: T };
 
-export function buildTree(classes: ClassEntry[]): Pkg {
-  const root: Pkg = { label: "", path: "", pkgs: [], classes: [], total: 0 };
-  const byPath = new Map<string, Pkg>([["", root]]);
-  const pkgFor = (path: string): Pkg => {
+/** `join` glues merged middle packages: `com.example.app`, or `res/values` for folders. */
+export function buildTree<T extends { id: string }>(classes: T[], join = "."): Pkg<T> {
+  const root: Pkg<T> = { label: "", path: "", pkgs: [], classes: [], total: 0 };
+  const byPath = new Map<string, Pkg<T>>([["", root]]);
+  const pkgFor = (path: string): Pkg<T> => {
     let p = byPath.get(path);
     if (p) return p;
     const i = path.lastIndexOf("/");
@@ -33,7 +35,7 @@ export function buildTree(classes: ClassEntry[]): Pkg {
     const i = c.id.lastIndexOf("/");
     pkgFor(i < 0 ? "" : c.id.slice(0, i)).classes.push(c);
   }
-  const finish = (p: Pkg): number => {
+  const finish = (p: Pkg<T>): number => {
     p.pkgs.sort((a, b) => a.label.localeCompare(b.label));
     p.classes.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     p.total = p.classes.length + p.pkgs.reduce((n, sub) => n + finish(sub), 0);
@@ -41,7 +43,7 @@ export function buildTree(classes: ClassEntry[]): Pkg {
     p.pkgs = p.pkgs.map((sub) => {
       while (sub.classes.length === 0 && sub.pkgs.length === 1) {
         const only = sub.pkgs[0];
-        sub = { ...only, label: `${sub.label}.${only.label}` };
+        sub = { ...only, label: `${sub.label}${join}${only.label}` };
       }
       return sub;
     });
@@ -51,9 +53,9 @@ export function buildTree(classes: ClassEntry[]): Pkg {
   return root;
 }
 
-export function visibleRows(root: Pkg, open: Set<string>): Row[] {
-  const rows: Row[] = [];
-  const walk = (p: Pkg, depth: number) => {
+export function visibleRows<T extends { id: string }>(root: Pkg<T>, open: Set<string>): Row<T>[] {
+  const rows: Row<T>[] = [];
+  const walk = (p: Pkg<T>, depth: number) => {
     for (const sub of p.pkgs) {
       const isOpen = open.has(sub.path);
       rows.push({ type: "pkg", key: sub.path, depth, pkg: sub, open: isOpen });
@@ -66,7 +68,7 @@ export function visibleRows(root: Pkg, open: Set<string>): Row[] {
 }
 
 /** Every package path that must be open to show `classId`. */
-export function pathsTo(root: Pkg, classId: string): string[] {
+export function pathsTo<T extends { id: string }>(root: Pkg<T>, classId: string): string[] {
   const out: string[] = [];
   const pkg = classId.includes("/") ? classId.slice(0, classId.lastIndexOf("/")) : "";
   let p = root;
