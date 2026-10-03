@@ -27,6 +27,7 @@
   import AppBar, { type Menu } from "$lib/shell/AppBar.svelte";
   import StatusBar from "$lib/shell/StatusBar.svelte";
   import Palette, { type PaletteItem } from "$lib/shell/Palette.svelte";
+  import Shortcuts from "$lib/shell/Shortcuts.svelte";
   import StartScreen from "$lib/start/StartScreen.svelte";
   import Onboarding, { onboarded } from "$lib/start/Onboarding.svelte";
   import Workbench from "$lib/workbench/Workbench.svelte";
@@ -51,6 +52,7 @@
   let drag = $state(false);
   let onboarding = $state(FIRST_RUN || !onboarded());
   let paletteOpen = $state(false);
+  let shortcutsOpen = $state(false);
   let engine = $state<EngineStatus | null>(null);
   let log = $state<string[]>([]);
   let logOpen = $state(false);
@@ -211,6 +213,7 @@
     };
     const always = [
       { label: "Go to anything", key: "Ctrl P", run: () => (paletteOpen = true) },
+      { label: "Keyboard shortcuts", key: "F1", run: () => (shortcutsOpen = true) },
       { label: logOpen ? "Hide log" : "Show log", run: () => (logOpen = !logOpen) },
     ];
     if (ws && workbench) {
@@ -240,12 +243,18 @@
       act("Close file", "Ctrl Shift W", closeFile);
     }
     else if (recents.length > 1) act("Clear recent files", "", clearRecents);
+    act("Keyboard shortcuts", "F1", () => (shortcutsOpen = true));
     act(logOpen ? "Hide log" : "Show log", "", () => (logOpen = !logOpen));
     return items;
   });
 
   function onkeydown(e: KeyboardEvent) {
-    if (onboarding || paletteOpen || !(e.ctrlKey || e.metaKey)) return;
+    if (e.key === "F1" && !onboarding && !paletteOpen) {
+      e.preventDefault();
+      shortcutsOpen = true;
+      return;
+    }
+    if (onboarding || paletteOpen || shortcutsOpen || !(e.ctrlKey || e.metaKey)) return;
     const key = e.key.toLowerCase();
     const inInput = e.target instanceof HTMLInputElement;
     if (key === "o") browse();
@@ -326,6 +335,10 @@
     <StatusBar {logOpen} ontogglelog={() => (logOpen = !logOpen)} where={ws && workbench ? workbench.where() : []} />
   {/if}
 </div>
+
+{#if shortcutsOpen}
+  <Shortcuts onclose={() => (shortcutsOpen = false)} />
+{/if}
 
 {#if paletteOpen}
   <Palette
