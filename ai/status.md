@@ -1,47 +1,54 @@
 # Status
 
-_Last verified: 2026-10-01_
+_Last verified: 2026-10-03_
 
 ## Works
 
-- No OS title bar; the app bar drags the window and has its buttons (2026-10-01).
-- First launch shows a one-screen onboarding; after it, the bundled example `vault-example.jar` is a default entry in the start screen's list (2026-10-01).
-- Start screen (2026-10-01): recent files kept by Rust (`recent.json` in the app data dir),
-  peek readout (first bytes + detected kind, or why it can't open), drag and drop, opening with
-  cancel (Esc), remove/clear with Ctrl Z undo, reveal in folder, locate a moved file, Ctrl P palette,
-  File/View menus, Log drawer. After a file opens, the old test view (`src/lib/Workbench.svelte`) shows.
-- Open → list classes → decompile, end to end, with JADX.
-- Inputs: APK, AAR, JAR (WAR is detected as JAR since its classes are plain
-  `.class` entries), DEX, single `.class`. Detection reads file contents, not the extension.
-- Engine crash recovery: pending requests fail, the next request restarts the
-  JVM and reopens the session's file.
-- Tests are all green as of 2026-10-01: engine 10 + smoke 1, Rust 8,
-  `pnpm check` 0 errors. A manual run against gson-2.14.0.jar opened 86 classes
-  in about 0.7 s and decompiled them cleanly.
+- Start screen and onboarding (2026-10-01). The Continue card now says which class you were last in
+  and how many notes the file has, and Enter reopens its tabs (2026-10-03).
+- Workbench (2026-10-03), replacing the old test bench:
+  - Class tree (virtualized, compacted packages, filter), tabs, back/forward history, Ctrl P palette
+    with `@` members and `:` lines, F1 shortcut sheet.
+  - Code view: virtualized, highlighted Java/smali/bytecode/XML, every class/method/field a link,
+    caret with keyboard movement, occurrence highlight, find in class, outline, warnings marked.
+  - jadx, Vineflower (JAR/AAR/class only) and smali/bytecode as views of one tab, keeping the member.
+  - Find usages (X), rename (N), comment (;), bookmarks, Frida snippets (F), smali references,
+    save class, export all sources. Notes are saved per file in `projects/` in the app data dir.
+  - Search names, code and string literals (regex, case), with progress and cancel.
+  - Overview: identity, findings (debuggable, debug cert, cleartext, backups, implicit exports,
+    obfuscation), exported components and deep links, permissions by level, app code vs libraries,
+    signing (v1/v2/v3, read not verified), native libs.
+  - Files: resources and assets; binary XML and resources.arsc decoded; images; hex for binaries.
+- Inputs: APK, AAB (code only, see below), AAR, JAR/WAR, DEX, single `.class`. Detection reads
+  contents, not the extension.
+- Engine crash recovery: pending requests fail, the next request restarts the JVM, reopens the
+  file and re-applies renames.
+- Tests green as of 2026-10-03: engine 24 (incl. smoke on the jlink runtime), Rust 16,
+  frontend 23, `pnpm check` 0 errors, clippy clean. CI workflow in `.github/workflows/ci.yml`
+  (not run yet: pushing is blocked, see gotchas).
+- Checked against a real APK (F-Droid 1.21, 10,166 classes): opens in ~6 s, overview, files,
+  usages; a cold code search decompiles everything in ~20 s, later ones are fast.
+- Checked in the real Tauri window under Xvfb (2026-10-03): onboarding, open, decompile, usages,
+  saving and resuming. Window dragging and resizing are still unchecked.
 
 ## Not built yet
 
-Roughly in the order the design implies:
-
-- **Real UI.** The start screen is done; after opening, the page is still a plain test bench. The target is
-  `design/mockup.html` + `design/DESIGN.md`: overview/triage page, package
-  tree, split panes, Java/Smali/Graph/Hex views, `Ctrl+P` palette, references
-  panel, status bar, themes.
-- **More decompilers.** Only `jadx` is registered. Vineflower, CFR and Procyon
-  are planned (the brand mark depicts four). Implement `Backend`, then register it in `Sessions`.
-  Note: those three read only JVM `.class` files, so APK/DEX input needs a
-  DEX→class step first (e.g. dex2jar), run once per file. Class ids must match JADX's.
-- **Engine features** the UI will need: smali output, control-flow graph,
-  cross-references, string search, manifest and resources, renames and comments.
-- **Inputs:** AAB is rejected with an explicit "not supported yet" error.
-  Loose smali files aren't accepted as input. The root README advertises both.
-- Packaging, releases and CI: nothing set up yet.
+- AAB manifest: it's protobuf, so an AAB's Overview has no Android section.
+- Vineflower for DEX input (needs a DEX to class step such as dex2jar). CFR and Procyon.
+- jadx's own deobfuscation (auto-renaming short names) as an option.
+- Xposed snippets; a call graph / control-flow graph view; hex view of class files.
+- Search inside resources (only code and names are searched).
+- Loose smali files as input (the README no longer claims it).
+- Packaging and releases: nothing set up beyond `tauri build`.
 
 ## Design
 
 - Start screen: implemented in `src/lib/start/` from `design/start-mockup.html` (2026-10-01).
-- Main workbench: `design/mockup.html` + `design/DESIGN.md`, not implemented yet.
+- Workbench: built without the local `design/mockup.html` (not in this clone), following the
+  start screen's look and the UI taste notes in conventions.md. Compare with the mockup when it's
+  available and adjust on purpose.
 
 ## Repo state
 
-All code is committed on `master` (commits on 2026-10-01). Nothing has been pushed yet.
+Work from 2026-10-03 is committed on branch `claude/sharp-mendel-qbctaf`, not merged to `master`.
+Pushing failed with a GitHub 403 (the Claude GitHub App lacks access for the owner's org).

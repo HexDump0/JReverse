@@ -8,6 +8,8 @@ The owner wants commits to look human-written:
   (implement), `fix:`, `chore:`, `docs:`, `refactor:`, `test:`.
 - Examples: `feat: add jvm engine with jadx backend`, `imp: engine client and tauri commands`.
 - Split work into logical commits instead of one big dump.
+- Commits are authored as the owner (`HexDump0 <hexdump0@gmail.com>`), with no co-author or
+  session trailers (owner, 2026-10-03).
 - Only commit or push when the owner asks.
 
 ## Code style
@@ -51,6 +53,13 @@ preview: all dropped. Final call (owner's spec): a one-screen onboarding on firs
 one button), then the normal main menu with the bundled example as a default entry. General wording, no
 feature lists, no text that isn't needed. Don't scan the user's disk.
 
+## Workbench UI (2026-10-03)
+
+Built in the start screen's language: flat colours, one accent for "where you are" (selection,
+caret, focus), no stripes, no motion except spinners and progress bars, Tabler icons only, labels
+on everything, no filler copy. Syntax colours are tokens in `app.css` (`--c-*`) and never use the
+accent. Single-letter kind glyphs (C, I, E, @, R; m, f) are coloured text, not badges.
+
 ## Commands
 
 ```sh
@@ -60,6 +69,7 @@ pnpm engine                    # build engine.jar + runtime into src-tauri/engin
 pnpm engine:test               # engine tests + smoke test (see gotchas: caching)
 cd src-tauri && cargo test     # Rust client tests
 pnpm check                     # svelte-check / TypeScript
+pnpm test                      # Vitest: doc model, tree, Frida snippets, overview helpers
 ```
 
 Debug overrides: `JREVERSE_JAVA`, `JREVERSE_ENGINE_JAR`,
