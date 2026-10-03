@@ -31,7 +31,6 @@ import jadx.api.metadata.ICodeAnnotation;
 import jadx.api.metadata.ICodeNodeRef;
 import jadx.api.metadata.annotations.NodeDeclareRef;
 import jadx.api.plugins.loader.JadxBasePluginLoader;
-import jadx.core.dex.attributes.AFlag;
 import jadx.core.dex.info.AccessInfo;
 import jadx.core.dex.instructions.args.ArgType;
 
@@ -153,7 +152,7 @@ public final class JadxBackend implements Backend {
 			targets.addAll(m.getOverrideRelatedMethods());
 		} else if (target instanceof JavaClass c) {
 			// "new Foo()" is a use of Foo, but jadx records it against the constructor.
-			c.getMethods().stream().filter(JavaMethod::isConstructor).forEach(targets::add);
+			targets.addAll(nodes.constructors(c));
 		}
 		codeData.readLock().lock();
 		try {
@@ -238,18 +237,9 @@ public final class JadxBackend implements Backend {
 		}
 	}
 
-	/** Every class, method and field, inner classes included; for name search. */
+	/** Every class, method and field, inner classes included; for name search. Decompiles nothing. */
 	public List<JavaNode> allNodes() {
-		List<JavaNode> out = new ArrayList<>();
-		for (JavaClass cls : jadx.getClassesWithInners()) {
-			if (cls.getClassNode().contains(AFlag.DONT_GENERATE)) {
-				continue;
-			}
-			out.add(cls);
-			out.addAll(cls.getMethods());
-			out.addAll(cls.getFields());
-		}
-		return out;
+		return nodes.all();
 	}
 
 	/** The decoded AndroidManifest.xml, or null for anything but an APK or AAR. */

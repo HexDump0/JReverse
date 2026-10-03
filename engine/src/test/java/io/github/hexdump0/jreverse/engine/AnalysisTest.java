@@ -102,6 +102,11 @@ class AnalysisTest {
 		assertTrue(names.asList().stream().anyMatch(h -> h.getAsJsonObject().has("node")
 				&& h.getAsJsonObject().getAsJsonObject("node").get("id").getAsString().equals(GREET)));
 
+		// Enum constants are fields too, even after their class was decompiled.
+		result(engine.call("decompile", "session", jar, "class", "fixture/Color"));
+		JsonArray red = hits(engine.call("search", "session", jar, "query", "RED", "caseSensitive", true, "scopes", array("members")));
+		assertEquals("fixture/Color.RED:Lfixture/Color;", red.get(0).getAsJsonObject().getAsJsonObject("node").get("id").getAsString());
+
 		JsonObject code = result(engine.call("search", "session", jar, "query", "!", "scopes", array("strings"),
 				"ticket", "t-strings"));
 		assertEquals(Fixtures.JAR_CLASSES.size(), code.get("searched").getAsInt());

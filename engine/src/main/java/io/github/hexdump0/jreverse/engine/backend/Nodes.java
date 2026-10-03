@@ -15,6 +15,8 @@ import jadx.core.codegen.TypeGen;
 import jadx.core.dex.info.AccessInfo;
 import jadx.core.dex.instructions.args.ArgType;
 import jadx.core.dex.info.MethodInfo;
+import jadx.core.dex.nodes.FieldNode;
+import jadx.core.dex.nodes.MethodNode;
 
 import io.github.hexdump0.jreverse.engine.rpc.ErrorCode;
 import io.github.hexdump0.jreverse.engine.rpc.RpcException;
@@ -26,14 +28,18 @@ import io.github.hexdump0.jreverse.engine.rpc.RpcException;
  */
 final class Nodes {
 
+	private final JadxDecompiler jadx;
 	private final Map<String, JavaClass> classes;
+	private final List<JavaClass> sorted;
 
 	Nodes(JadxDecompiler jadx) {
+		this.jadx = jadx;
 		Map<String, JavaClass> map = new HashMap<>();
 		for (JavaClass cls : jadx.getClassesWithInners()) {
 			map.putIfAbsent(id(cls), cls);
 		}
 		this.classes = Map.copyOf(map);
+		this.sorted = map.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(Map.Entry::getValue).toList();
 	}
 
 	static String id(JavaNode node) {
@@ -72,13 +78,46 @@ final class Nodes {
 				return m;
 			}
 		} else {
-			for (JavaField f : cls.getFields()) {
-				if (f.getFieldNode().getFieldInfo().getShortId().equals(member)) {
-					return f;
-				}
+			// Through the ClassNode: JavaClass.getFields() decompiles the class and hides enum constants.
+			FieldNode f = cls.getClassNode().searchFieldByShortId(member);
+			if (f != null && jadx.getJavaNodeByRef(f) instanceof JavaField field) {
+				return field;
 			}
 		}
 		throw new RpcException(ErrorCode.NO_NODE, "not found: " + id);
+	}
+
+	/**
+	 * Every class, method and field, inner classes included, without decompiling
+	 * anything. Synthetic members are left out.
+	 */
+	List<JavaNode> all() {
+		List<JavaNode> out = new ArrayList<>();
+		for (JavaClass cls : sorted) {
+			out.add(cls);
+			for (MethodNode m : cls.getClassNode().getMethods()) {
+				if (!m.getAccessFlags().isSynthetic() && jadx.getJavaNodeByRef(m) instanceof JavaMethod jm) {
+					out.add(jm);
+				}
+			}
+			for (FieldNode f : cls.getClassNode().getFields()) {
+				if (!f.getAccessFlags().isSynthetic() && jadx.getJavaNodeByRef(f) instanceof JavaField jf) {
+					out.add(jf);
+				}
+			}
+		}
+		return out;
+	}
+
+	/** A class's constructors, without decompiling it. */
+	List<JavaMethod> constructors(JavaClass cls) {
+		List<JavaMethod> out = new ArrayList<>();
+		for (MethodNode m : cls.getClassNode().getMethods()) {
+			if (m.getMethodInfo().isConstructor() && jadx.getJavaNodeByRef(m) instanceof JavaMethod jm) {
+				out.add(jm);
+			}
+		}
+		return out;
 	}
 
 	static boolean isNode(JavaNode node) {
