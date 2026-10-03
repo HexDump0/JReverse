@@ -23,8 +23,8 @@ APK, AAB, AAR, JAR, WAR, DEX or class file and read it as Java.
 - **Notes**: rename classes, methods and fields (`N`) and comment on them
   (`;`), bookmark lines (`Ctrl+B`). They're saved per file, with your open
   tabs, so the start screen can put you back where you left off.
-- **Copy** a Frida hook for a method (`F`), a smali reference, or a whole
-  class; save a class, or export every class's source to a folder.
+- **Copy** a Frida (`F`) or Xposed (`Y`) hook for a method, a smali
+  reference, or a whole class; save a class, or export every class's source to a folder.
 
 `F1` lists every shortcut. They follow jadx-gui where it has one.
 

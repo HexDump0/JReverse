@@ -24,7 +24,7 @@ import {
 import { say, setTask } from "$lib/status.svelte";
 import { enclosing, findDecl, hexDoc, javaDoc, plainDoc, smaliDoc, xmlDoc, type Doc, type Pos, type View } from "./doc";
 import { fmtN, fmtSize } from "$lib/format";
-import { ownerOf } from "./frida";
+import { ownerOf } from "./hooks";
 import { buildTree, type Pkg } from "./tree";
 import type { Reveal } from "./CodeView.svelte";
 

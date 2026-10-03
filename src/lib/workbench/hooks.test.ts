@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NodeInfo } from "$lib/engine";
-import { fridaSnippet, paramNames } from "./frida";
+import { fridaSnippet, paramNames, xposedSnippet } from "./hooks";
 
 const method = (id: string, detail: string, frida: string[]): NodeInfo => ({
   kind: "method",
@@ -48,5 +48,19 @@ describe("paramNames", () => {
     expect(paramNames("void put(Map<String, List<Integer>> map, int n) {", 2)).toEqual(["map", "n"]);
     expect(paramNames("void put(String a) {", 2)).toEqual(["arg0", "arg1"]);
     expect(paramNames(undefined, 1)).toEqual(["arg0"]);
+  });
+});
+
+describe("xposedSnippet", () => {
+  it("passes primitives, java.lang and arrays as class literals, others by name", () => {
+    const m = method("com/x/A.run(I[BLjava/lang/String;Lcom/x/B;[Lcom/x/B;)V", "run(...): void", ["int", "[B", "java.lang.String", "com.x.B", "[Lcom.x.B;"]);
+    expect(xposedSnippet(m).split("\n")[0]).toBe(
+      'XposedHelpers.findAndHookMethod("com.x.A", classLoader, "run", int.class, byte[].class, String.class, "com.x.B", "com.x.B[]", new XC_MethodHook() {',
+    );
+  });
+
+  it("hooks constructors with findAndHookConstructor", () => {
+    const ctor = method("com/x/A.<init>()V", "A()", []);
+    expect(xposedSnippet(ctor).split("\n")[0]).toBe('XposedHelpers.findAndHookConstructor("com.x.A", classLoader, new XC_MethodHook() {');
   });
 });

@@ -1,7 +1,7 @@
 <script lang="ts">
   // What you've added to this file: renames, comments and bookmarks. Saved with the file.
   import Icon from "$lib/Icon.svelte";
-  import { ownerOf } from "./frida";
+  import { ownerOf } from "./hooks";
   import { dotted, simpleName, type Workspace } from "./workspace.svelte";
 
   interface Props {

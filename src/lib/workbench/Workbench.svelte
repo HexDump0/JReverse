@@ -22,7 +22,7 @@
   import SearchPanel from "./SearchPanel.svelte";
   import UsagesPanel from "./UsagesPanel.svelte";
   import { enclosing, linkAt, wordAt, type Link, type Pos, type View } from "./doc";
-  import { fridaSnippet, ownerOf } from "./frida";
+  import { fridaSnippet, ownerOf, xposedSnippet } from "./hooks";
   import { dotted, simpleName, type Tab, type Workspace } from "./workspace.svelte";
 
   let { ws, home }: { ws: Workspace; home: string | null } = $props();
@@ -191,6 +191,12 @@
     if (doc) copy(doc.lines.join("\n"), tab.kind === "file" ? fileName(tab.path!) : `${ws.className(tab.cls ?? "")} (${fmtN(doc.lines.length)} lines)`);
   }
 
+  function xposed() {
+    if (!doc || tab.kind !== "class") return;
+    const node = target()?.node ?? enclosing(doc, tab.caret.line);
+    if (node) copy(xposedSnippet(node), `an Xposed snippet for ${node.name}`);
+  }
+
   /** `Lcom/foo/Bar;->run(I)V`, the way smali and most hooking tools spell it. */
   function smaliRef(node: NodeInfo): string {
     if (node.kind === "class") return `L${node.id};`;
@@ -332,6 +338,7 @@
       { label: "Bookmark line", key: "Ctrl B", disabled: !inClass, run: bookmark },
       "-",
       { label: "Copy Frida snippet", key: "F", disabled: !inClass, run: frida },
+      { label: "Copy Xposed snippet", key: "Y", disabled: !inClass, run: xposed },
       { label: node ? `Copy name ${node.name}` : "Copy name", disabled: !node, run: () => node && copy(node.name, node.name) },
       { label: "Copy smali reference", disabled: !node, run: () => node && copy(smaliRef(node), "the smali reference") },
       { label: "Copy class source", key: "Ctrl Shift C", disabled: !doc, run: copySource },
@@ -356,6 +363,7 @@
         "-",
         { label: "Copy name", run: () => copy(dotted(cls), dotted(cls)) },
         { label: "Copy Frida snippet", run: () => copy(fridaSnippet(node), "a Frida snippet") },
+        { label: "Copy Xposed snippet", run: () => copy(xposedSnippet(node), "an Xposed snippet") },
       ],
     };
   }
@@ -384,6 +392,7 @@
           { label: "Comment", key: ";", disabled: tab.kind !== "class", run: comment },
           { label: "Bookmark line", key: "Ctrl B", disabled: tab.kind !== "class", run: bookmark },
           { label: "Copy Frida snippet", key: "F", disabled: tab.kind !== "class", run: frida },
+          { label: "Copy Xposed snippet", key: "Y", disabled: tab.kind !== "class", run: xposed },
           { label: "Copy class source", key: "Ctrl Shift C", disabled: !doc || tab.kind === "overview", run: copySource },
           { label: tab.view === "smali" ? "Show Java" : isDex ? "Show smali" : "Show bytecode", key: "Tab", disabled: tab.kind !== "class", run: toggleView },
           ...(views.some((v) => v.view === "vineflower")
@@ -474,6 +483,7 @@
       else if (key === "n") rename();
       else if (key === ";") comment();
       else if (key === "f") frida();
+      else if (key === "y") xposed();
       else if (key === "Tab" && !e.shiftKey) toggleView();
       else if (key === "Escape" && ws.usages) ws.usages = null;
       else if (key === "Escape") ws.goBack();

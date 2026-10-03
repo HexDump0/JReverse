@@ -1,4 +1,4 @@
-// Frida hooks for a method, field or class, in the shape jadx-gui's "Copy as frida snippet" uses.
+// Frida and Xposed hooks for a method, field or class, in the shapes jadx-gui's snippets use.
 import type { NodeInfo } from "$lib/engine";
 
 /** `com/foo/Bar$Inner` as Java.use wants it: `com.foo.Bar$Inner`. */
@@ -74,4 +74,49 @@ export function fridaSnippet(node: NodeInfo, declLine?: string): string {
     ...(returns ? [`    console.log(\`${label} result=\${result}\`);`, "    return result;"] : []),
   ];
   return `${use}\n${v}["${method}"]${overload}.implementation = function (${list}) {\n${body.join("\n")}\n};`;
+}
+
+const JAVA_LANG = /^java\.lang\.[A-Z]\w*$/;
+
+/** An Xposed parameter type: `int.class`, `String.class`, `byte[].class`, or a class name. */
+function xposedType(frida: string): string {
+  if (!frida.includes(".") && !frida.startsWith("[")) return `${frida}.class`;
+  if (JAVA_LANG.test(frida)) return `${frida.slice(10)}.class`;
+  const prim: Record<string, string> = { Z: "boolean", B: "byte", S: "short", C: "char", I: "int", J: "long", F: "float", D: "double" };
+  const dims = /^\[+/.exec(frida)?.[0].length ?? 0;
+  if (dims) {
+    const elem = frida.slice(dims);
+    const brackets = "[]".repeat(dims);
+    if (prim[elem]) return `${prim[elem]}${brackets}.class`;
+    const name = elem.slice(1, -1);
+    return JAVA_LANG.test(name) ? `${name.slice(10)}${brackets}.class` : `"${name}${brackets}"`;
+  }
+  return `"${frida}"`;
+}
+
+export function xposedSnippet(node: NodeInfo): string {
+  const owner = node.kind === "class" ? node.id : ownerOf(node.id);
+  const cls = javaName(owner);
+  if (node.kind === "class") return `Class<?> ${varName(owner)} = XposedHelpers.findClass("${cls}", classLoader);`;
+  if (node.kind === "field") {
+    const get = node.static ? `XposedHelpers.getStaticObjectField(XposedHelpers.findClass("${cls}", classLoader), "${node.name}")` : `XposedHelpers.getObjectField(obj, "${node.name}")`;
+    return `Object ${node.name} = ${get};`;
+  }
+  const raw = node.id.slice(node.id.indexOf(".") + 1, node.id.indexOf("("));
+  if (raw === "<clinit>") return "// Static initialisers run before a hook can be installed.";
+  const args = (node.frida ?? []).map(xposedType);
+  const call = raw === "<init>" ? `XposedHelpers.findAndHookConstructor("${cls}", classLoader` : `XposedHelpers.findAndHookMethod("${cls}", classLoader, "${raw}"`;
+  return [
+    `${call}${args.map((a) => `, ${a}`).join("")}, new XC_MethodHook() {`,
+    "    @Override",
+    "    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {",
+    "        super.beforeHookedMethod(param);",
+    "    }",
+    "",
+    "    @Override",
+    "    protected void afterHookedMethod(MethodHookParam param) throws Throwable {",
+    "        super.afterHookedMethod(param);",
+    "    }",
+    "});",
+  ].join("\n");
 }
