@@ -40,6 +40,10 @@ export interface Tab {
   view: View;
   caret: Pos;
   reveal: Reveal | null;
+  /** The code view's scroll position, to come back to. */
+  top?: number;
+  /** The last `reveal.n` the code view has scrolled to. */
+  seen?: number;
 }
 
 export type DocEntry =
@@ -136,8 +140,19 @@ export class Workspace {
     if (Object.keys(this.project.renames).length || Object.keys(this.project.comments).length) {
       await this.pushCodeData();
     }
+    // Tabs come back without decompiling; each loads when it's first shown.
+    const views = new Set<View>(["java", "smali", ...(this.opened.engines.includes("vineflower") ? ["vineflower" as const] : [])]);
     for (const t of saved.tabs ?? []) {
-      if (this.byId.has(t.cls)) this.openClass(t.cls, { view: t.view, pos: { line: t.line, col: 0 }, record: false, activate: false });
+      if (!this.byId.has(t.cls) || this.tabs.some((x) => x.cls === t.cls)) continue;
+      const pos = { line: t.line, col: 0 };
+      this.tabs.push({
+        key: `class:${t.cls}`,
+        kind: "class",
+        cls: t.cls,
+        view: views.has(t.view) ? t.view : "java",
+        caret: pos,
+        reveal: { ...pos, n: ++this.revealN },
+      });
     }
     if (saved.active && this.tabs.some((t) => t.key === saved!.active)) this.activeKey = saved.active;
     if (this.active.cls) this.ensure(this.active);
@@ -413,6 +428,7 @@ export class Workspace {
     const entry = this.doc(tab);
     const from = entry?.state === "ready" ? enclosing(entry.doc, tab.caret.line) : undefined;
     tab.view = view;
+    tab.top = undefined;
     this.persist();
     let doc: Doc;
     try {
@@ -496,8 +512,22 @@ export class Workspace {
     // Every Java view may show the changed name, so all of them are stale. Smali never changes.
     const shown = new Set(this.tabs.filter((t) => t.kind === "class" && t.view === "java").map((t) => this.docKey(t.cls!, "java")));
     for (const key of [...this.docs.keys()]) if (key.startsWith("java:") && !shown.has(key)) this.docs.delete(key);
+    // Comments and "renamed from" notes add lines, so keep each caret where it was relative to its member.
+    const anchors = this.tabs
+      .filter((t) => t.kind === "class" && t.view === "java")
+      .map((t) => {
+        const e = this.doc(t);
+        const at = e?.state === "ready" ? enclosing(e.doc, t.caret.line) : undefined;
+        const decl = at && e?.state === "ready" ? e.doc.decls.get(at.id) : undefined;
+        return { t, id: at?.id, delta: decl ? t.caret.line - decl.line : 0 };
+      });
     const reloads = [...shown].map((key) => this.loadDoc(key.slice(5), "java", true).catch(() => {}));
     await Promise.all(reloads);
+    for (const { t, id, delta } of anchors) {
+      const e = this.doc(t);
+      const decl = id && e?.state === "ready" ? e.doc.decls.get(id) : undefined;
+      if (decl) t.caret = { line: decl.line + delta, col: t.caret.col };
+    }
     if (this.usages) this.findUsages(this.usages.target);
     say(message);
   }

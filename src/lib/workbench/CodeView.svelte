@@ -13,7 +13,7 @@
   // Read-only source view. Only the lines on screen are in the DOM, so a
   // 20,000-line class scrolls like a 20-line one. Columns are monospace
   // character cells, which lets the caret and find marks sit at `col * 1ch`.
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import { linkAt, segments, wordAt, type Doc, type Link, type Pos, type Seg } from "./doc";
 
@@ -26,10 +26,15 @@
     onfollow: (link: Link, pos: Pos) => void;
     oncaret: (pos: Pos) => void;
     oncontext: (e: MouseEvent, pos: Pos) => void;
-    onscrolled?: (line: number) => void;
+    /** Where this view was scrolled to before, in pixels; restored on mount. */
+    top?: number;
+    /** The reveal already scrolled to; a new one wins over `top`. */
+    seen?: number;
+    onscrolled?: (top: number) => void;
+    onrevealed?: (n: number) => void;
   }
 
-  let { doc, caret, reveal, fontSize, onfollow, oncaret, oncontext, onscrolled }: Props = $props();
+  let { doc, caret, reveal, fontSize, onfollow, oncaret, oncontext, top: savedTop, seen, onscrolled, onrevealed }: Props = $props();
 
   const OVERSCAN = 30;
   const PAD = 16;
@@ -155,11 +160,19 @@
 
   $effect(() => {
     const r = reveal;
-    if (!r) return;
+    if (!r || r.n === seen) return;
     void doc;
     tick().then(() => {
       scrollToLine(r.line, r.col, false);
       marked = r.mark ? r.line : null;
+      onrevealed?.(r.n);
+    });
+  });
+
+  // Back to where this tab was, unless a jump is waiting.
+  $effect(() => {
+    untrack(() => {
+      if (savedTop !== undefined && (!reveal || reveal.n === seen)) tick().then(() => (scroller.scrollTop = savedTop!));
     });
   });
 
@@ -175,7 +188,7 @@
 
   function onscroll() {
     top = scroller.scrollTop;
-    onscrolled?.(Math.floor(top / lh));
+    onscrolled?.(top);
   }
 
   /* ---------- caret ---------- */

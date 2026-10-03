@@ -649,16 +649,22 @@
         </div>
         <div class="codewrap">
           {#if doc}
-            <CodeView
-              bind:this={code}
-              {doc}
-              caret={tab.caret}
-              reveal={tab.reveal}
-              fontSize={prefs.fontSize}
-              onfollow={follow}
-              oncaret={(p) => (tab.caret = p)}
-              oncontext={onCodeContext}
-            />
+            {#key `${tab.key}:${tab.view}`}
+              <CodeView
+                bind:this={code}
+                {doc}
+                caret={tab.caret}
+                reveal={tab.reveal}
+                top={tab.top}
+                seen={tab.seen}
+                fontSize={prefs.fontSize}
+                onfollow={follow}
+                oncaret={(p) => (tab.caret = p)}
+                oncontext={onCodeContext}
+                onscrolled={(px) => (tab.top = px)}
+                onrevealed={(n) => (tab.seen = n)}
+              />
+            {/key}
             {#if prefs.outline && tab.kind === "class" && doc.declLines.length}
               <aside class="outline">
                 <div class="oh">Outline</div>
