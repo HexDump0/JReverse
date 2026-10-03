@@ -49,6 +49,8 @@ apply to jadx only. Both share jadx's class ids.
 | `export` | `session`, `dir`, `ticket`? | `dir`, `written`, `failed`, `ms` |
 | `cancel` | `ticket` | `cancelled`: whether a job with that ticket was running |
 | `overview` | `session` | see below |
+| `files` | `session` | `files: [{path, type, size}]`: everything but code |
+| `file` | `session`, `path` | `{path, kind, size, text?, data?, mime?, children?, truncated}` |
 | `setCodeData` | `session`, `renames`? `{node: name}`, `comments`? `{node: text}` | `applied`. Replaces all earlier ones. |
 | `close` | `session` | `{}` |
 | `shutdown` | | `{}`, then exit |
@@ -84,11 +86,16 @@ verified); for APK/AAR the decoded `manifest` and `android` (package,
 versions, SDKs, permissions, application flags and `components` with
 `exported`, `launcher`, intent actions and deep `links`).
 
+**Files.** `file` returns `kind` `text` (binary XML decoded; plain text up to
+4 MB), `image` (`data` is base64, with `mime`), `binary` (the first 64 KB as
+base64 `data`) or `table` for `resources.arsc`, whose `children` are the
+`res/values*` files it decodes to; those can then be read with `file` too.
+
 Requests are answered on a thread pool, so responses can arrive out of order.
 
 Error codes: `BAD_REQUEST`, `UNKNOWN_METHOD`, `NO_SESSION`, `NO_CLASS`,
-`NO_ENGINE`, `NO_NODE`, `UNSUPPORTED_INPUT`, `OPEN_FAILED`,
-`DECOMPILE_FAILED`, `EXPORT_FAILED`, `CANCELLED`, `INTERNAL`. Malformed
+`NO_ENGINE`, `NO_NODE`, `NO_FILE`, `UNSUPPORTED_INPUT`, `OPEN_FAILED`,
+`DECOMPILE_FAILED`, `DECODE_FAILED`, `EXPORT_FAILED`, `CANCELLED`, `INTERNAL`. Malformed
 requests get an error with `"id": null`.
 
 Bump `Version.PROTOCOL` (and `PROTOCOL` in `src-tauri/src/engine/process.rs`)

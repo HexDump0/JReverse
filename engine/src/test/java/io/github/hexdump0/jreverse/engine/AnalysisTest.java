@@ -206,6 +206,42 @@ class AnalysisTest {
 				"smalifix/Hello", "engine", "vineflower"));
 	}
 
+	@Test
+	void filesInTheArchive() throws Exception {
+		byte[] greeter;
+		try (var zip = new java.util.zip.ZipFile(Fixtures.jar().toFile())) {
+			greeter = zip.getInputStream(zip.getEntry("fixture/Greeter.class")).readAllBytes();
+		}
+		byte[] png = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 13};
+		Path jar = tmp.resolve("files.jar");
+		Fixtures.zip(jar, "fixture/Greeter.class", greeter, "app.properties", "url=https://example.com\n".getBytes(),
+				"logo.png", png, "blob.bin", new byte[] {1, 0, 2, 0, (byte) 0xff}, "conf/beans.xml", "<beans/>".getBytes());
+		String s = result(engine.call("open", "path", jar.toString())).get("session").getAsString();
+
+		JsonArray files = result(engine.call("files", "session", s)).getAsJsonArray("files");
+		List<String> paths = files.asList().stream().map(f -> f.getAsJsonObject().get("path").getAsString()).toList();
+		assertTrue(paths.containsAll(List.of("app.properties", "logo.png", "blob.bin", "conf/beans.xml")), paths.toString());
+		assertFalse(paths.contains("fixture/Greeter.class"), "code isn't listed");
+
+		JsonObject props = result(engine.call("file", "session", s, "path", "app.properties"));
+		assertEquals("text", props.get("kind").getAsString());
+		assertEquals("url=https://example.com\n", props.get("text").getAsString());
+		assertEquals("<beans/>", result(engine.call("file", "session", s, "path", "conf/beans.xml")).get("text").getAsString());
+		JsonObject image = result(engine.call("file", "session", s, "path", "logo.png"));
+		assertEquals("image", image.get("kind").getAsString());
+		assertEquals("image/png", image.get("mime").getAsString());
+		JsonObject blob = result(engine.call("file", "session", s, "path", "blob.bin"));
+		assertEquals("binary", blob.get("kind").getAsString());
+		assertEquals("AQACAP8=", blob.get("data").getAsString());
+		assertError("NO_FILE", engine.call("file", "session", s, "path", "nope.txt"));
+
+		// An APK's resource table decodes into res/values files on request.
+		String apk = result(engine.call("open", "path", Fixtures.apk(Files.createDirectories(tmp.resolve("files-apk"))).toString()))
+				.get("session").getAsString();
+		JsonObject table = result(engine.call("file", "session", apk, "path", "resources.arsc"));
+		assertEquals("table", table.get("kind").getAsString());
+	}
+
 	private static List<String> spanTexts(JsonArray spans, JsonArray nodes, String[] lines) {
 		List<String> out = new ArrayList<>();
 		for (int i = 0; i < spans.size(); i += 4) {

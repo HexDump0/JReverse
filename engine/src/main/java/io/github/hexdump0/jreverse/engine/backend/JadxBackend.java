@@ -46,6 +46,7 @@ public final class JadxBackend implements Backend {
 	private final List<ClassEntry> classes;
 	private final Map<String, JavaClass> byId;
 	private final Nodes nodes;
+	private final ArchiveFiles files;
 	// Renames and comments re-run jadx's passes over every class, so nothing may
 	// decompile while they are applied.
 	private final ReadWriteLock codeData = new ReentrantReadWriteLock();
@@ -57,6 +58,7 @@ public final class JadxBackend implements Backend {
 		this.classes = classes;
 		this.byId = byId;
 		this.nodes = new Nodes(jadx);
+		this.files = new ArchiveFiles(jadx);
 	}
 
 	public static JadxBackend load(Path input) throws RpcException {
@@ -240,6 +242,11 @@ public final class JadxBackend implements Backend {
 	/** Every class, method and field, inner classes included; for name search. Decompiles nothing. */
 	public List<JavaNode> allNodes() {
 		return nodes.all();
+	}
+
+	/** Resources, assets and other files that aren't code. */
+	public ArchiveFiles files() {
+		return files;
 	}
 
 	/** The decoded AndroidManifest.xml, or null for anything but an APK or AAR. */

@@ -16,6 +16,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import io.github.hexdump0.jreverse.engine.backend.ArchiveFiles;
 import io.github.hexdump0.jreverse.engine.backend.Backend;
 import io.github.hexdump0.jreverse.engine.backend.ClassEntry;
 import io.github.hexdump0.jreverse.engine.backend.Decompiled;
@@ -223,6 +224,45 @@ final class Methods {
 		JsonObject result = new JsonObject();
 		result.addProperty("applied", applied);
 		return result;
+	}
+
+	JsonElement files(JsonObject params) throws RpcException {
+		ArchiveFiles files = sessions.get(string(params, "session")).jadx().files();
+		JsonArray list = new JsonArray();
+		for (ArchiveFiles.Entry e : files.list()) {
+			JsonObject o = new JsonObject();
+			o.addProperty("path", e.path());
+			o.addProperty("type", e.type());
+			o.addProperty("size", e.size());
+			list.add(o);
+		}
+		JsonObject result = new JsonObject();
+		result.add("files", list);
+		return result;
+	}
+
+	JsonElement file(JsonObject params) throws RpcException {
+		ArchiveFiles.Content c = sessions.get(string(params, "session")).jadx().files().read(string(params, "path"));
+		JsonObject o = new JsonObject();
+		o.addProperty("path", c.path());
+		o.addProperty("kind", c.kind());
+		o.addProperty("size", c.size());
+		if (c.text() != null) {
+			o.addProperty("text", c.text());
+		}
+		if (c.data() != null) {
+			o.addProperty("data", c.data());
+		}
+		if (c.mime() != null) {
+			o.addProperty("mime", c.mime());
+		}
+		if (!c.children().isEmpty()) {
+			JsonArray children = new JsonArray();
+			c.children().forEach(children::add);
+			o.add("children", children);
+		}
+		o.addProperty("truncated", c.truncated());
+		return o;
 	}
 
 	JsonElement close(JsonObject params) throws RpcException {

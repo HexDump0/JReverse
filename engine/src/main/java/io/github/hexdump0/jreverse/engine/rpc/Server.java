@@ -65,6 +65,8 @@ public final class Server {
 				Map.entry("cancel", methods::cancel),
 				Map.entry("overview", methods::overview),
 				Map.entry("setCodeData", methods::setCodeData),
+				Map.entry("files", methods::files),
+				Map.entry("file", methods::file),
 				Map.entry("close", methods::close));
 	}
 

@@ -88,6 +88,16 @@ pub async fn set_code_data(engine: State<'_, Engine>, session: String, renames: 
     engine.call(&session, "setCodeData", params(json!({ "renames": renames, "comments": comments }))).await
 }
 
+#[tauri::command]
+pub async fn list_files(engine: State<'_, Engine>, session: String) -> Result<Value, EngineError> {
+    engine.call(&session, "files", Map::new()).await
+}
+
+#[tauri::command]
+pub async fn read_file(engine: State<'_, Engine>, session: String, path: String) -> Result<Value, EngineError> {
+    engine.call(&session, "file", params(json!({ "path": path }))).await
+}
+
 /// Renames, comments and bookmarks the user made in `path`, or null.
 #[tauri::command]
 pub fn load_project(projects: State<'_, Projects>, path: PathBuf) -> Option<Value> {

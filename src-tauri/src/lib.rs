@@ -55,6 +55,8 @@ pub fn run() {
             commands::cancel_job,
             commands::overview,
             commands::set_code_data,
+            commands::list_files,
+            commands::read_file,
             commands::load_project,
             commands::save_project,
             commands::write_text_file,
