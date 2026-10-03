@@ -12,7 +12,7 @@ _(none)_
 
 - Review the workbench (built 2026-10-03 without `design/mockup.html` in the clone) against the
   mockup and the UI taste notes; adjust on purpose where they disagree.
-- Get pushing working (GitHub 403 for the Claude app on the owner's org), then let CI run once.
+- Open a PR (or merge) so CI runs for the first time; it only triggers on `master` and PRs.
 - Open question for the owner: commit `design/` and `brand/`? They're in `.git/info/exclude`, so
   other clones and worktrees don't have the mockups.
 

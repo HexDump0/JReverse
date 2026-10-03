@@ -27,7 +27,7 @@ _Last verified: 2026-10-03_
   file and re-applies renames.
 - Tests green as of 2026-10-03: engine 25 (incl. smoke on the jlink runtime), Rust 16,
   frontend 25, `pnpm check` 0 errors, clippy clean. CI workflow in `.github/workflows/ci.yml`
-  (not run yet: pushing is blocked, see gotchas).
+  (runs on pushes to `master` and on pull requests, so not yet on this branch).
 - Checked against a real APK (F-Droid 1.21, 10,166 classes): opens in ~6 s, overview, files,
   usages; a cold code search decompiles everything in ~20 s, later ones are fast.
 - Checked in the real Tauri window under Xvfb (2026-10-03): onboarding, open, decompile, usages,
@@ -50,5 +50,4 @@ _Last verified: 2026-10-03_
 
 ## Repo state
 
-Work from 2026-10-03 is committed on branch `claude/sharp-mendel-qbctaf`, not merged to `master`.
-Pushing failed with a GitHub 403 (the Claude GitHub App lacks access for the owner's org).
+Work from 2026-10-03 is pushed to branch `claude/sharp-mendel-qbctaf`, not merged to `master`.

@@ -4,8 +4,8 @@ Things that look wrong, break silently or have already wasted time. Add to this.
 
 ## Repo
 
-- **Pushing to GitHub failed with 403** on 2026-10-03: the Claude GitHub App has no access to the
-  owner's account/org. Commits stay local until that's fixed in claude.ai settings.
+- A GitHub 403 on push means the Claude GitHub App isn't connected for the owner's account;
+  reconnecting it in claude.ai settings fixed it on 2026-10-03.
 - **`design/` and `brand/` are not in git.** They're excluded in
   `.git/info/exclude` (local, not `.gitignore`), so they don't show in
   `git status` and can't be committed. They exist only on the owner's machine.

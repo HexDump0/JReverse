@@ -20,7 +20,7 @@ What was done. What's left. Anything the next agent must know.
   shows where you were. Vitest (26 tests) and a CI workflow added.
 - Verified with a real-engine browser harness and in the real app under Xvfb (gotchas, Testing),
   on F-Droid and NewPipe APKs. A branch review found 6 bugs, all fixed (one: null params).
-- Not pushed: GitHub returned 403. Built without `design/mockup.html`; review against it.
+- Pushed after the owner reconnected GitHub. Built without `design/mockup.html`; review against it.
 
 ## 2026-10-01 — claude-s7k — no title bar, first-run welcome, bundled example
 - Window is undecorated (`decorations: false`). The app bar is the drag region (`data-tauri-drag-region`)
