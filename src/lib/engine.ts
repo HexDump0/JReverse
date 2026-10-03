@@ -24,6 +24,158 @@ export interface Decompiled {
   engine: string;
   ms: number;
   warnings: number;
+  /** Identifiers that name a node: flat `[line, col, len, node]` quadruples, 0-based. */
+  links: number[];
+  /** The declarations among `links`, same layout. */
+  decls: number[];
+  nodes: NodeInfo[];
+}
+
+export type NodeKind = "class" | "method" | "field";
+
+/** A class, method or field. See engine/README.md. */
+export interface NodeInfo {
+  kind: NodeKind;
+  /** `com/foo/Bar`, `com/foo/Bar.run(I)V` or `com/foo/Bar.count:I`. Never changes on rename. */
+  id: string;
+  /** The top-level class whose source declares it. */
+  top: string;
+  name: string;
+  /** e.g. `run(int): void`. */
+  detail: string;
+  access: "public" | "protected" | "private" | "";
+  static: boolean;
+  /** Argument types for Frida's `overload()`, methods only. */
+  frida?: string[];
+}
+
+export interface Smali {
+  source: string;
+  ms: number;
+}
+
+export interface Usage {
+  cls: string;
+  line: number;
+  col: number;
+  len: number;
+  text: string;
+  in?: NodeInfo;
+}
+
+export type SearchScope = "classes" | "members" | "code" | "strings";
+
+export interface NameHit {
+  type: "class" | "method" | "field";
+  cls: string;
+  node: NodeInfo;
+}
+
+export interface CodeHit {
+  /** `string` when the match is inside a string literal. */
+  type: "code" | "string";
+  cls: string;
+  line: number;
+  col: number;
+  len: number;
+  text: string;
+}
+
+export type SearchHit = NameHit | CodeHit;
+
+export const isNameHit = (h: SearchHit): h is NameHit => "node" in h;
+
+export interface SearchResult {
+  hits: SearchHit[];
+  truncated: boolean;
+  searched: number;
+  ms: number;
+}
+
+export interface Progress {
+  ticket: string;
+  done: number;
+  total: number;
+}
+
+export interface Cert {
+  subject: string;
+  issuer: string;
+  serial: string;
+  notBefore: string;
+  notAfter: string;
+  algorithm: string;
+  key: string;
+  sha256: string;
+  sha1: string;
+  debug: boolean;
+}
+
+export interface Component {
+  type: "activity" | "service" | "receiver" | "provider";
+  name: string;
+  alias?: string;
+  permission?: string;
+  authorities?: string;
+  actions: string[];
+  links: string[];
+  launcher: boolean;
+  exported: boolean;
+  exportedImplicitly: boolean;
+}
+
+export interface AndroidInfo {
+  package: string;
+  versionName?: string;
+  versionCode?: string;
+  compileSdk?: string;
+  minSdk?: string;
+  targetSdk?: string;
+  label?: string;
+  application?: string;
+  debuggable?: string;
+  allowBackup?: string;
+  usesCleartextTraffic?: string;
+  networkSecurityConfig?: string;
+  extractNativeLibs?: string;
+  permissions: { name: string; maxSdk?: string }[];
+  declaredPermissions: { name: string; protectionLevel?: string }[];
+  features: string[];
+  components: Component[];
+}
+
+export interface Overview {
+  path: string;
+  kind: InputKind;
+  size: number;
+  classes: number;
+  methods: number;
+  fields: number;
+  files?: number;
+  dex?: { name: string; size: number }[];
+  nativeLibs?: { abi: string; name: string; size: number }[];
+  javaVersions?: { java: string; classes: number }[];
+  jarManifest?: Record<string, string>;
+  signing?: { schemes: string[]; certs: Cert[] };
+  manifest?: string;
+  android?: AndroidInfo;
+}
+
+export interface ExportResult {
+  dir: string;
+  written: number;
+  failed: number;
+  ms: number;
+}
+
+/** What the user added to a file, saved per file by src-tauri/src/projects.rs. */
+export interface Project {
+  renames: Record<string, string>;
+  comments: Record<string, string>;
+  bookmarks: { cls: string; line: number; note: string }[];
+  /** Open tabs when the file was last closed, to resume. */
+  tabs?: { cls: string; view: "java" | "smali"; line: number }[];
+  active?: string;
 }
 
 /** What every command rejects with. */
@@ -49,6 +201,65 @@ export function listClasses(session: string): Promise<ClassEntry[]> {
 
 export function decompileClass(session: string, classId: string, decompiler?: string): Promise<Decompiled> {
   return invoke("decompile_class", { session, classId, decompiler });
+}
+
+export function smaliClass(session: string, classId: string): Promise<Smali> {
+  return invoke("smali_class", { session, classId });
+}
+
+export function nodeInfo(session: string, node: string): Promise<NodeInfo> {
+  return invoke("node_info", { session, node });
+}
+
+export function findUsages(session: string, node: string): Promise<{ usages: Usage[]; ms: number }> {
+  return invoke("find_usages", { session, node });
+}
+
+export interface SearchOptions {
+  query: string;
+  regex: boolean;
+  caseSensitive: boolean;
+  scopes: SearchScope[];
+  limit?: number;
+  /** Lets `cancelJob` stop it, and tags its progress events. */
+  ticket?: string;
+}
+
+export function search(session: string, o: SearchOptions): Promise<SearchResult> {
+  return invoke("search", { session, ...o });
+}
+
+export function exportSources(session: string, dir: string, ticket?: string): Promise<ExportResult> {
+  return invoke("export_sources", { session, dir, ticket });
+}
+
+export function cancelJob(ticket: string): Promise<void> {
+  return invoke("cancel_job", { ticket });
+}
+
+export function overview(session: string): Promise<Overview> {
+  return invoke("overview", { session });
+}
+
+export function setCodeData(session: string, renames: Record<string, string>, comments: Record<string, string>): Promise<{ applied: number }> {
+  return invoke("set_code_data", { session, renames, comments });
+}
+
+export function loadProject(path: string): Promise<Project | null> {
+  return invoke("load_project", { path });
+}
+
+/** Null deletes the saved project. */
+export function saveProject(path: string, data: Project | null): Promise<void> {
+  return invoke("save_project", { path, data });
+}
+
+export function writeTextFile(path: string, contents: string): Promise<void> {
+  return invoke("write_text_file", { path, contents });
+}
+
+export function onEngineProgress(handler: (p: Progress) => void): Promise<UnlistenFn> {
+  return listen<Progress>("engine://progress", (e) => handler(e.payload));
 }
 
 export function closeSession(session: string): Promise<void> {
