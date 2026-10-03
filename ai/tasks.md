@@ -22,8 +22,6 @@ Not prioritised by the owner yet. Ask before starting anything big.
 
 - Engine progress for `open` ("38 of 146"): jadx's `load()` has no progress hook, so this needs
   a look at its internals or a pass of our own.
-- jadx deobfuscation as an option (reopen with readable names for obfuscated apps)
 - AAB: decode the protobuf manifest so the Overview has its Android section
 - Vineflower for DEX input (dex2jar step), then CFR / Procyon
-- Xposed snippets next to Frida; search inside resources
 - Packaging and releases (`tauri build` per OS, signing)
