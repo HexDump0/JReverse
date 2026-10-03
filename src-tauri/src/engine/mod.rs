@@ -37,6 +37,8 @@ pub enum EngineEvent {
     /// One line of the engine's stderr.
     Log(String),
     Status(Status),
+    /// How far a search or export has got: `{ticket, done, total}`.
+    Progress(Value),
 }
 
 pub type EventSink = Arc<dyn Fn(EngineEvent) + Send + Sync>;
@@ -63,6 +65,13 @@ pub struct Decompiled {
     pub engine: String,
     pub ms: u64,
     pub warnings: u64,
+    /// Spans as flat `[line, col, len, node]` quadruples; see engine/README.md.
+    #[serde(default)]
+    pub links: Vec<u32>,
+    #[serde(default)]
+    pub decls: Vec<u32>,
+    #[serde(default)]
+    pub nodes: Vec<Value>,
 }
 
 #[derive(Deserialize)]
@@ -78,6 +87,8 @@ struct SessionEntry {
     path: PathBuf,
     engine_id: String,
     generation: u64,
+    /// The last `setCodeData` params, sent again after the file is reopened.
+    code_data: Option<Map<String, Value>>,
 }
 
 #[derive(Default)]
@@ -118,7 +129,7 @@ impl Engine {
         let session = format!("session-{}", sessions.next);
         sessions.open.insert(
             session.clone(),
-            SessionEntry { path: path.to_path_buf(), engine_id: opened.session, generation: process.generation },
+            SessionEntry { path: path.to_path_buf(), engine_id: opened.session, generation: process.generation, code_data: None },
         );
         Ok(Opened { session, kind: opened.kind, class_count: opened.class_count, ms: opened.ms })
     }
@@ -134,6 +145,28 @@ impl Engine {
             params.insert("engine".into(), engine.into());
         }
         decode(self.session_request(session, "decompile", params).await?)
+    }
+
+    /// Any per-session method (`smali`, `usages`, `search`, ...), passed through as JSON.
+    pub async fn call(&self, session: &str, method: &str, params: Map<String, Value>) -> Result<Value, EngineError> {
+        let replay = (method == "setCodeData").then(|| params.clone());
+        let result = self.session_request(session, method, params).await?;
+        if let Some(code_data) = replay {
+            if let Some(entry) = self.sessions.lock().await.open.get_mut(session) {
+                entry.code_data = Some(code_data);
+            }
+        }
+        Ok(result)
+    }
+
+    /// Stops a running search or export. A job that already finished, or an
+    /// engine that isn't running, is not an error.
+    pub async fn cancel(&self, ticket: &str) -> Result<(), EngineError> {
+        let current = self.current.lock().await.clone();
+        if let Some(process) = current.filter(|p| p.is_alive()) {
+            process.request("cancel", json!({ "ticket": ticket })).await?;
+        }
+        Ok(())
     }
 
     pub async fn close(&self, session: &str) -> Result<(), EngineError> {
@@ -205,6 +238,11 @@ impl Engine {
                 let reopened: OpenResult = decode(process.request("open", json!({ "path": entry.path })).await?)?;
                 entry.engine_id = reopened.session;
                 entry.generation = process.generation;
+                if let Some(code_data) = &entry.code_data {
+                    let mut params = code_data.clone();
+                    params.insert("session".into(), entry.engine_id.clone().into());
+                    process.request("setCodeData", Value::Object(params)).await?;
+                }
             }
             entry.engine_id.clone()
         };

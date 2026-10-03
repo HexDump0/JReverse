@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use super::{EngineError, EngineEvent, EventSink, Launch, Status};
 
 /// Wire protocol version this build speaks; see `Version.PROTOCOL` in the engine.
-pub const PROTOCOL: u64 = 1;
+pub const PROTOCOL: u64 = 2;
 
 const READY_TIMEOUT: Duration = Duration::from_secs(10);
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(1);
@@ -133,7 +133,7 @@ impl Process {
             let stopping = stopping.clone();
             tokio::spawn(async move {
                 while let Ok(Some(line)) = lines.next_line().await {
-                    route(&pending, &line);
+                    route(&pending, &line, &sink);
                 }
                 let waiting = {
                     let mut p = pending.lock().unwrap();
@@ -233,7 +233,7 @@ fn parse_ready(line: &str) -> Result<ReadyInfo, EngineError> {
     serde_json::from_value(msg["params"].clone()).map_err(|e| EngineError::Handshake(e.to_string()))
 }
 
-fn route(pending: &Mutex<Pending>, line: &str) {
+fn route(pending: &Mutex<Pending>, line: &str, sink: &EventSink) {
     let msg: Value = match serde_json::from_str(line) {
         Ok(v) => v,
         Err(_) => {
@@ -243,6 +243,7 @@ fn route(pending: &Mutex<Pending>, line: &str) {
     };
     let Some(id) = msg.get("id").and_then(Value::as_u64) else {
         match msg.get("method").and_then(Value::as_str) {
+            Some("progress") => sink(EngineEvent::Progress(msg["params"].clone())),
             Some(method) => log::debug!("engine notification: {method}"),
             None => log::warn!("engine message without id: {}", truncate(line)),
         }

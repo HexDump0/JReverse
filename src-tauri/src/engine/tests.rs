@@ -22,14 +22,20 @@ struct FakeEngines {
     boot: Boot,
     running: Mutex<Vec<JoinHandle<()>>>,
     opens: AtomicUsize,
+    /// Every `setCodeData` the fakes received, as `(engine session, renames)`.
+    code_data: Mutex<Vec<(String, Value)>>,
 }
 
 impl FakeEngines {
     fn new(boot: Boot) -> Arc<Self> {
-        Arc::new(Self { boot, running: Mutex::new(Vec::new()), opens: AtomicUsize::new(0) })
+        Arc::new(Self { boot, running: Mutex::new(Vec::new()), opens: AtomicUsize::new(0), code_data: Mutex::new(Vec::new()) })
     }
 
     fn engine(self: &Arc<Self>) -> Engine {
+        self.engine_with(Arc::new(|_| {}))
+    }
+
+    fn engine_with(self: &Arc<Self>, sink: EventSink) -> Engine {
         let fakes = self.clone();
         let spawn: SpawnFn = Arc::new(move || {
             let (client_in, engine_in) = tokio::io::duplex(64 * 1024);
@@ -38,7 +44,7 @@ impl FakeEngines {
             fakes.running.lock().unwrap().push(task);
             Ok(Pipes { stdin: Box::new(client_in), stdout: Box::new(client_out), stderr: None, child: None })
         });
-        Engine::new(spawn, Arc::new(|_| {}))
+        Engine::new(spawn, sink)
     }
 
     /// Simulates the JVM dying: its pipes close mid-request.
@@ -70,6 +76,18 @@ async fn fake_engine(fakes: Arc<FakeEngines>, input: DuplexStream, output: Duple
         let id = req["id"].clone();
         let params = req["params"].clone();
         let method = req["method"].as_str().unwrap().to_string();
+        if method == "setCodeData" {
+            let session = params["session"].as_str().unwrap().to_string();
+            fakes.code_data.lock().unwrap().push((session, params["renames"].clone()));
+            send(out.clone(), json!({"id": id, "result": {"applied": 1}})).await;
+            continue;
+        }
+        if method == "search" {
+            let ticket = params["ticket"].clone();
+            send(out.clone(), json!({"method": "progress", "params": {"ticket": ticket, "done": 1, "total": 2}})).await;
+            send(out.clone(), json!({"id": id, "result": {"hits": [], "truncated": false, "searched": 2, "ms": 1}})).await;
+            continue;
+        }
         if method == "open" {
             let n = fakes.opens.fetch_add(1, Ordering::SeqCst) + 1;
             send(out.clone(), json!({"id": id, "result": {"session": format!("s{n}"), "kind": "jar", "classCount": 2, "ms": 1}})).await;
@@ -153,6 +171,45 @@ async fn crash_fails_pending_requests_then_restarts_and_reopens() {
     let out = engine.decompile(&s, "a/Fast", None).await.unwrap();
     assert_eq!(out.source, "// a/Fast via \"s2\"");
     assert_eq!(fakes.opens.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn renames_are_sent_again_after_a_restart() {
+    let fakes = FakeEngines::new(Boot::Normal);
+    let engine = fakes.engine();
+    let s = engine.open(Path::new("/x/app.jar")).await.unwrap().session;
+    let mut p = Map::new();
+    p.insert("renames".into(), json!({"a/Fast": "Quick"}));
+    engine.call(&s, "setCodeData", p).await.unwrap();
+
+    fakes.crash_all();
+    tokio::time::sleep(Duration::from_millis(50)).await; // let the client see the pipes close
+    engine.decompile(&s, "a/Fast", None).await.unwrap();
+    let seen = fakes.code_data.lock().unwrap().clone();
+    assert_eq!(seen, [("s1".to_string(), json!({"a/Fast": "Quick"})), ("s2".to_string(), json!({"a/Fast": "Quick"}))]);
+}
+
+#[tokio::test]
+async fn progress_notifications_reach_the_sink() {
+    let fakes = FakeEngines::new(Boot::Normal);
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink: EventSink = {
+        let seen = seen.clone();
+        Arc::new(move |event| {
+            if let EngineEvent::Progress(p) = event {
+                seen.lock().unwrap().push(p);
+            }
+        })
+    };
+    let engine = fakes.engine_with(sink);
+    let s = engine.open(Path::new("/x/app.jar")).await.unwrap().session;
+    let mut p = Map::new();
+    p.insert("query".into(), "x".into());
+    p.insert("ticket".into(), "t1".into());
+    let result = engine.call(&s, "search", p).await.unwrap();
+    assert_eq!(result["searched"], 2);
+    assert_eq!(*seen.lock().unwrap(), [json!({"ticket": "t1", "done": 1, "total": 2})]);
+    engine.cancel("t1").await.unwrap_err(); // the fake doesn't know cancel, but the request is made
 }
 
 #[tokio::test]
