@@ -3,6 +3,14 @@ package io.github.hexdump0.jreverse.engine.rpc;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -11,16 +19,28 @@ import com.google.gson.JsonObject;
 import io.github.hexdump0.jreverse.engine.backend.Backend;
 import io.github.hexdump0.jreverse.engine.backend.ClassEntry;
 import io.github.hexdump0.jreverse.engine.backend.Decompiled;
+import io.github.hexdump0.jreverse.engine.backend.JadxBackend;
+import io.github.hexdump0.jreverse.engine.backend.NodeInfo;
+import io.github.hexdump0.jreverse.engine.backend.Progress;
+import io.github.hexdump0.jreverse.engine.backend.Search;
+import io.github.hexdump0.jreverse.engine.session.Export;
 import io.github.hexdump0.jreverse.engine.session.Session;
 import io.github.hexdump0.jreverse.engine.session.Sessions;
 
 /** Request handlers. Each takes the request's params and returns its result. */
 final class Methods {
 
-	private final Sessions sessions;
+	private static final int DEFAULT_SEARCH_LIMIT = 1000;
+	private static final long PROGRESS_EVERY_MS = 100;
 
-	Methods(Sessions sessions) {
+	private final Sessions sessions;
+	private final BiConsumer<String, JsonObject> notify;
+	/** Long jobs by the ticket the client gave them, so {@code cancel} can stop them. */
+	private final Map<String, AtomicBoolean> running = new ConcurrentHashMap<>();
+
+	Methods(Sessions sessions, BiConsumer<String, JsonObject> notify) {
 		this.sessions = sessions;
+		this.notify = notify;
 	}
 
 	JsonElement open(JsonObject params) throws RpcException {
@@ -68,6 +88,137 @@ final class Methods {
 		result.addProperty("engine", backend.id());
 		result.addProperty("ms", millisSince(start));
 		result.addProperty("warnings", out.warnings());
+		result.add("links", spans(out.links()));
+		result.add("decls", spans(out.decls()));
+		JsonArray nodes = new JsonArray(out.nodes().size());
+		out.nodes().forEach(n -> nodes.add(node(n)));
+		result.add("nodes", nodes);
+		return result;
+	}
+
+	JsonElement smali(JsonObject params) throws RpcException {
+		JadxBackend jadx = sessions.get(string(params, "session")).jadx();
+		long start = System.nanoTime();
+		String source = jadx.smali(string(params, "class"));
+		JsonObject result = new JsonObject();
+		result.addProperty("source", source);
+		result.addProperty("ms", millisSince(start));
+		return result;
+	}
+
+	JsonElement node(JsonObject params) throws RpcException {
+		return node(sessions.get(string(params, "session")).jadx().nodeInfo(string(params, "node")));
+	}
+
+	JsonElement usages(JsonObject params) throws RpcException {
+		JadxBackend jadx = sessions.get(string(params, "session")).jadx();
+		long start = System.nanoTime();
+		List<JadxBackend.Usage> found = jadx.usages(string(params, "node"));
+		JsonArray list = new JsonArray(found.size());
+		for (JadxBackend.Usage u : found) {
+			JsonObject o = new JsonObject();
+			o.addProperty("cls", u.cls());
+			o.addProperty("line", u.line());
+			o.addProperty("col", u.col());
+			o.addProperty("len", u.len());
+			o.addProperty("text", u.text());
+			if (u.in() != null) {
+				o.add("in", node(u.in()));
+			}
+			list.add(o);
+		}
+		JsonObject result = new JsonObject();
+		result.add("usages", list);
+		result.addProperty("ms", millisSince(start));
+		return result;
+	}
+
+	JsonElement search(JsonObject params) throws RpcException {
+		JadxBackend jadx = sessions.get(string(params, "session")).jadx();
+		Set<Search.Scope> scopes = EnumSet.noneOf(Search.Scope.class);
+		if (params.has("scopes") && params.get("scopes").isJsonArray()) {
+			for (JsonElement s : params.getAsJsonArray("scopes")) {
+				scopes.add(Search.scope(s.getAsString()));
+			}
+		}
+		if (scopes.isEmpty()) {
+			scopes = EnumSet.allOf(Search.Scope.class);
+		}
+		int limit = params.has("limit") ? params.get("limit").getAsInt() : DEFAULT_SEARCH_LIMIT;
+		Search search = new Search(jadx, string(params, "query"), bool(params, "regex"), bool(params, "caseSensitive"), scopes,
+				Math.max(1, limit));
+		String ticket = optString(params, "ticket");
+		AtomicBoolean cancelled = start(ticket);
+		try {
+			Search.Result r = search.run(progress(ticket), cancelled::get);
+			JsonArray hits = new JsonArray(r.hits().size());
+			for (Search.Hit h : r.hits()) {
+				JsonObject o = new JsonObject();
+				o.addProperty("type", h.type());
+				o.addProperty("cls", h.cls());
+				if (h.node() != null) {
+					o.add("node", node(h.node()));
+				} else {
+					o.addProperty("line", h.line());
+					o.addProperty("col", h.col());
+					o.addProperty("len", h.len());
+					o.addProperty("text", h.text());
+				}
+				hits.add(o);
+			}
+			JsonObject result = new JsonObject();
+			result.add("hits", hits);
+			result.addProperty("truncated", r.truncated());
+			result.addProperty("searched", r.searched());
+			result.addProperty("ms", r.ms());
+			return result;
+		} finally {
+			finish(ticket);
+		}
+	}
+
+	JsonElement export(JsonObject params) throws RpcException {
+		JadxBackend jadx = sessions.get(string(params, "session")).jadx();
+		Path dir;
+		try {
+			dir = Path.of(string(params, "dir")).toAbsolutePath().normalize();
+		} catch (InvalidPathException e) {
+			throw new RpcException(ErrorCode.BAD_REQUEST, "invalid path: " + params.get("dir"));
+		}
+		String ticket = optString(params, "ticket");
+		AtomicBoolean cancelled = start(ticket);
+		try {
+			Export.Result r = Export.sources(jadx, dir, progress(ticket), cancelled::get);
+			JsonObject result = new JsonObject();
+			result.addProperty("dir", dir.toString());
+			result.addProperty("written", r.written());
+			result.addProperty("failed", r.failed());
+			result.addProperty("ms", r.ms());
+			return result;
+		} finally {
+			finish(ticket);
+		}
+	}
+
+	JsonElement cancel(JsonObject params) throws RpcException {
+		AtomicBoolean flag = running.get(string(params, "ticket"));
+		if (flag != null) {
+			flag.set(true);
+		}
+		JsonObject result = new JsonObject();
+		result.addProperty("cancelled", flag != null);
+		return result;
+	}
+
+	JsonElement overview(JsonObject params) throws RpcException {
+		return sessions.get(string(params, "session")).overview();
+	}
+
+	JsonElement setCodeData(JsonObject params) throws RpcException {
+		JadxBackend jadx = sessions.get(string(params, "session")).jadx();
+		int applied = jadx.setCodeData(stringMap(params, "renames"), stringMap(params, "comments"));
+		JsonObject result = new JsonObject();
+		result.addProperty("applied", applied);
 		return result;
 	}
 
@@ -76,12 +227,104 @@ final class Methods {
 		return new JsonObject();
 	}
 
+	private AtomicBoolean start(String ticket) throws RpcException {
+		AtomicBoolean flag = new AtomicBoolean();
+		if (ticket != null && running.putIfAbsent(ticket, flag) != null) {
+			throw new RpcException(ErrorCode.BAD_REQUEST, "ticket already running: " + ticket);
+		}
+		return flag;
+	}
+
+	private void finish(String ticket) {
+		if (ticket != null) {
+			running.remove(ticket);
+		}
+	}
+
+	/** Sends {@code progress} notifications for a ticket, at most every 100 ms plus the last one. */
+	private Progress progress(String ticket) {
+		if (ticket == null) {
+			return Progress.NONE;
+		}
+		long[] last = {0};
+		return (done, total) -> {
+			long now = System.nanoTime() / 1_000_000;
+			synchronized (last) {
+				if (done < total && now - last[0] < PROGRESS_EVERY_MS) {
+					return;
+				}
+				last[0] = now;
+			}
+			JsonObject p = new JsonObject();
+			p.addProperty("ticket", ticket);
+			p.addProperty("done", done);
+			p.addProperty("total", total);
+			notify.accept("progress", p);
+		};
+	}
+
+	/** Spans as a flat array, four numbers each: line, column, length, node index. */
+	private static JsonArray spans(List<Decompiled.Span> spans) {
+		JsonArray a = new JsonArray(spans.size() * 4);
+		for (Decompiled.Span s : spans) {
+			a.add(s.line());
+			a.add(s.col());
+			a.add(s.len());
+			a.add(s.node());
+		}
+		return a;
+	}
+
+	private static JsonObject node(NodeInfo n) {
+		JsonObject o = new JsonObject();
+		o.addProperty("kind", n.kind());
+		o.addProperty("id", n.id());
+		o.addProperty("top", n.top());
+		o.addProperty("name", n.name());
+		o.addProperty("detail", n.detail());
+		o.addProperty("access", n.access());
+		o.addProperty("static", n.isStatic());
+		if (n.kind().equals("method")) {
+			JsonArray frida = new JsonArray();
+			n.frida().forEach(frida::add);
+			o.add("frida", frida);
+		}
+		return o;
+	}
+
 	private static String string(JsonObject params, String name) throws RpcException {
 		JsonElement el = params.get(name);
 		if (el == null || !el.isJsonPrimitive() || !el.getAsJsonPrimitive().isString()) {
 			throw new RpcException(ErrorCode.BAD_REQUEST, "missing string param: " + name);
 		}
 		return el.getAsString();
+	}
+
+	private static String optString(JsonObject params, String name) throws RpcException {
+		return params.has(name) && !params.get(name).isJsonNull() ? string(params, name) : null;
+	}
+
+	private static boolean bool(JsonObject params, String name) {
+		JsonElement el = params.get(name);
+		return el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isBoolean() && el.getAsBoolean();
+	}
+
+	private static Map<String, String> stringMap(JsonObject params, String name) throws RpcException {
+		Map<String, String> out = new LinkedHashMap<>();
+		JsonElement el = params.get(name);
+		if (el == null || el.isJsonNull()) {
+			return out;
+		}
+		if (!el.isJsonObject()) {
+			throw new RpcException(ErrorCode.BAD_REQUEST, name + " must be an object");
+		}
+		for (Map.Entry<String, JsonElement> e : el.getAsJsonObject().entrySet()) {
+			if (!e.getValue().isJsonPrimitive()) {
+				throw new RpcException(ErrorCode.BAD_REQUEST, name + "." + e.getKey() + " must be a string");
+			}
+			out.put(e.getKey(), e.getValue().getAsString());
+		}
+		return out;
 	}
 
 	private static long millisSince(long startNanos) {

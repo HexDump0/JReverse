@@ -43,6 +43,13 @@ class SmokeTest {
 				String cls = EngineClient.ids(engine.call("listClasses", "session", session)).get(0);
 				JsonObject decompiled = engine.call("decompile", "session", session, "class", cls);
 				assertTrue(decompiled.has("result"), input.getKey() + ": " + decompiled);
+				// Bytecode needs ASM in the fat jar, the overview java.xml and X.509 in the runtime.
+				for (String method : new String[] {"smali", "overview"}) {
+					JsonObject r = engine.call(method, "session", session, "class", cls);
+					assertTrue(r.has("result"), input.getKey() + " " + method + ": " + r);
+				}
+				JsonObject usages = engine.call("usages", "session", session, "node", cls);
+				assertTrue(usages.has("result"), input.getKey() + ": " + usages);
 			}
 			assertTrue(engine.call("shutdown").has("result"));
 			assertEquals(0, engine.waitForExit());

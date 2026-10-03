@@ -3,7 +3,7 @@ package io.github.hexdump0.jreverse.engine;
 public final class Version {
 
 	/** Bumped on any incompatible change to the wire protocol. */
-	public static final int PROTOCOL = 1;
+	public static final int PROTOCOL = 2;
 
 	private Version() {
 	}

@@ -44,19 +44,28 @@ public final class Server {
 	public Server(InputStream in, OutputStream out) {
 		this.in = in;
 		this.transport = new Transport(out);
-		int threads = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors()));
+		// Searches and exports hold a thread for their whole run, so leave room for decompiles.
+		int threads = Math.max(4, Math.min(8, Runtime.getRuntime().availableProcessors() * 2));
 		AtomicInteger n = new AtomicInteger();
 		this.pool = Executors.newFixedThreadPool(threads, r -> {
 			Thread t = new Thread(r, "engine-worker-" + n.incrementAndGet());
 			t.setDaemon(true);
 			return t;
 		});
-		Methods methods = new Methods(sessions);
-		this.handlers = Map.of(
-				"open", methods::open,
-				"listClasses", methods::listClasses,
-				"decompile", methods::decompile,
-				"close", methods::close);
+		Methods methods = new Methods(sessions, transport::notify);
+		this.handlers = Map.ofEntries(
+				Map.entry("open", methods::open),
+				Map.entry("listClasses", methods::listClasses),
+				Map.entry("decompile", methods::decompile),
+				Map.entry("smali", methods::smali),
+				Map.entry("node", methods::node),
+				Map.entry("usages", methods::usages),
+				Map.entry("search", methods::search),
+				Map.entry("export", methods::export),
+				Map.entry("cancel", methods::cancel),
+				Map.entry("overview", methods::overview),
+				Map.entry("setCodeData", methods::setCodeData),
+				Map.entry("close", methods::close));
 	}
 
 	public void run() {

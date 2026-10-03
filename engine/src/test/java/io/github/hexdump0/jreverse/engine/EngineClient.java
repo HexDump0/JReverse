@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 
 /** Drives an engine child process over the real protocol. */
 public final class EngineClient implements AutoCloseable {
@@ -24,6 +25,7 @@ public final class EngineClient implements AutoCloseable {
 	private final Writer in;
 	private final BufferedReader out;
 	private final Map<Long, JsonObject> early = new HashMap<>();
+	private final List<JsonObject> notifications = new ArrayList<>();
 	private final JsonObject ready;
 	private long nextId;
 
@@ -58,11 +60,19 @@ public final class EngineClient implements AutoCloseable {
 		return await(send(method, params));
 	}
 
-	/** Sends a request and returns its id without waiting. {@code params} alternate name, value. */
+	/**
+	 * Sends a request and returns its id without waiting. {@code params} alternate
+	 * name, value; values are strings, booleans, numbers or JSON.
+	 */
 	public long send(String method, Object... params) throws IOException {
 		JsonObject p = new JsonObject();
 		for (int i = 0; i < params.length; i += 2) {
-			p.addProperty((String) params[i], (String) params[i + 1]);
+			p.add((String) params[i], switch (params[i + 1]) {
+				case JsonElement j -> j;
+				case Boolean b -> new JsonPrimitive(b);
+				case Number n -> new JsonPrimitive(n);
+				case Object o -> new JsonPrimitive(o.toString());
+			});
 		}
 		JsonObject msg = new JsonObject();
 		long id = ++nextId;
@@ -71,6 +81,11 @@ public final class EngineClient implements AutoCloseable {
 		msg.add("params", p);
 		sendRaw(msg.toString());
 		return id;
+	}
+
+	/** Notifications seen while waiting for responses, oldest first. */
+	public List<JsonObject> notifications() {
+		return notifications;
 	}
 
 	public void sendRaw(String line) throws IOException {
@@ -88,6 +103,8 @@ public final class EngineClient implements AutoCloseable {
 				msg = next;
 			} else if (nextId != null && !nextId.isJsonNull()) {
 				early.put(nextId.getAsLong(), next);
+			} else if (next.has("method")) {
+				notifications.add(next);
 			}
 		}
 		return msg;
