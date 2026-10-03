@@ -7,13 +7,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import io.github.hexdump0.jreverse.engine.backend.JadxBackend;
+import io.github.hexdump0.jreverse.engine.backend.VineflowerBackend;
 import io.github.hexdump0.jreverse.engine.rpc.ErrorCode;
 import io.github.hexdump0.jreverse.engine.rpc.RpcException;
 
 /** Registry of open sessions. Thread-safe. */
 public final class Sessions {
 
-	public static final List<String> ENGINES = List.of(JadxBackend.ID);
+	public static final List<String> ENGINES = List.of(JadxBackend.ID, VineflowerBackend.ID);
 	public static final String DEFAULT_ENGINE = JadxBackend.ID;
 
 	private final Map<String, Session> open = new ConcurrentHashMap<>();

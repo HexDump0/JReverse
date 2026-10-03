@@ -2,6 +2,7 @@ package io.github.hexdump0.jreverse.engine.session;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 
 import com.google.gson.JsonObject;
@@ -9,6 +10,7 @@ import com.google.gson.JsonObject;
 import io.github.hexdump0.jreverse.engine.backend.Backend;
 import io.github.hexdump0.jreverse.engine.backend.ClassEntry;
 import io.github.hexdump0.jreverse.engine.backend.JadxBackend;
+import io.github.hexdump0.jreverse.engine.backend.VineflowerBackend;
 import io.github.hexdump0.jreverse.engine.rpc.ErrorCode;
 import io.github.hexdump0.jreverse.engine.rpc.RpcException;
 
@@ -19,7 +21,8 @@ public final class Session implements AutoCloseable {
 	private final Path path;
 	private final InputKind kind;
 	private final JadxBackend primary;
-	private final Map<String, Backend> backends;
+	/** Other decompilers, loaded on first use. */
+	private final Map<String, Backend> others = new HashMap<>();
 	private JsonObject overview;
 
 	Session(String id, Path path, InputKind kind, JadxBackend primary) {
@@ -27,7 +30,6 @@ public final class Session implements AutoCloseable {
 		this.path = path;
 		this.kind = kind;
 		this.primary = primary;
-		this.backends = Map.of(primary.id(), primary);
 	}
 
 	public String id() {
@@ -59,16 +61,33 @@ public final class Session implements AutoCloseable {
 		return overview;
 	}
 
-	public Backend backend(String engine) throws RpcException {
-		Backend b = backends.get(engine);
+	/** The decompilers that can read this input; jadx first. Vineflower reads JVM class files only. */
+	public List<String> engines() {
+		return switch (kind) {
+			case JAR, AAR, CLASS -> List.of(JadxBackend.ID, VineflowerBackend.ID);
+			default -> List.of(JadxBackend.ID);
+		};
+	}
+
+	public synchronized Backend backend(String engine) throws RpcException {
+		if (engine.equals(primary.id())) {
+			return primary;
+		}
+		if (!engines().contains(engine)) {
+			throw new RpcException(ErrorCode.NO_ENGINE, "engine not available for " + kind.wireName() + " input: " + engine);
+		}
+		Backend b = others.get(engine);
 		if (b == null) {
-			throw new RpcException(ErrorCode.NO_ENGINE, "engine not available: " + engine);
+			b = VineflowerBackend.load(path, kind == InputKind.AAR, kind == InputKind.CLASS ? VineflowerBackend.singleId(classes()) : null,
+					classes());
+			others.put(engine, b);
 		}
 		return b;
 	}
 
 	@Override
-	public void close() {
-		backends.values().forEach(Backend::close);
+	public synchronized void close() {
+		primary.close();
+		others.values().forEach(Backend::close);
 	}
 }

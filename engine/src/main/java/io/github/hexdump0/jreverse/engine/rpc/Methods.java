@@ -60,6 +60,9 @@ final class Methods {
 		result.addProperty("session", session.id());
 		result.addProperty("kind", session.kind().wireName());
 		result.addProperty("classCount", session.classes().size());
+		JsonArray engines = new JsonArray();
+		session.engines().forEach(engines::add);
+		result.add("engines", engines);
 		result.addProperty("ms", millisSince(start));
 		return result;
 	}

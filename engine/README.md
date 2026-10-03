@@ -24,9 +24,9 @@ One compact JSON object per line. stdout carries protocol messages only;
 logs go to stderr. The engine exits on `shutdown` or when stdin closes.
 
 ```jsonc
-← {"method":"ready","params":{"protocol":2,"version":"0.1.0","engines":["jadx"]}}
+← {"method":"ready","params":{"protocol":2,"version":"0.1.0","engines":["jadx","vineflower"]}}
 → {"id":1,"method":"open","params":{"path":"/x/app.apk"}}
-← {"id":1,"result":{"session":"s1","kind":"apk","classCount":4812,"ms":1339}}
+← {"id":1,"result":{"session":"s1","kind":"apk","classCount":4812,"engines":["jadx"],"ms":1339}}
 → {"id":2,"method":"decompile","params":{"session":"s1","class":"a/b"}}
 ← {"id":2,"error":{"code":"NO_CLASS","message":"class not found: a/b"}}
 ← {"method":"progress","params":{"ticket":"t1","done":38,"total":146}}
@@ -34,9 +34,14 @@ logs go to stderr. The engine exits on `shutdown` or when stdin closes.
 
 | Method | Params | Result |
 |---|---|---|
-| `open` | `path` | `session`, `kind` (`apk` `aar` `jar` `dex` `class`), `classCount`, `ms` |
+| `open` | `path` | `session`, `kind` (`apk` `aab` `aar` `jar` `dex` `class`), `classCount`, `engines`, `ms` |
 | `listClasses` | `session` | `[{id, kind}]`, top-level classes sorted by id |
 | `decompile` | `session`, `class`, `engine`? (default `jadx`) | `source`, `engine`, `ms`, `warnings`, `links`, `decls`, `nodes` |
+
+**Decompilers.** `engines` in `open` lists the ones that can read the file:
+jadx always, Vineflower for JVM class files (JAR, AAR, a single class; not
+DEX). Vineflower loads on first use and has no `links`; renames and comments
+apply to jadx only. Both share jadx's class ids.
 | `smali` | `session`, `class` | `source` (smali for DEX, JVM bytecode for class files), `ms` |
 | `node` | `session`, `node` | a node (below) |
 | `usages` | `session`, `node` | `usages: [{cls, line, col, len, text, in?}]`, `ms` |

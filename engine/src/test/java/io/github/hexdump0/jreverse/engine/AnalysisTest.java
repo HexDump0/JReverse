@@ -177,6 +177,35 @@ class AnalysisTest {
 		assertTrue(reverted.contains("public String greet(String"), reverted);
 	}
 
+	@Test
+	void vineflowerForClassFiles() throws Exception {
+		JsonObject open = result(engine.call("open", "path", Fixtures.jar().toString()));
+		assertEquals("[\"jadx\",\"vineflower\"]", open.getAsJsonArray("engines").toString());
+		String s = open.get("session").getAsString();
+		JsonObject vf = result(engine.call("decompile", "session", s, "class", "fixture/Outer", "engine", "vineflower"));
+		assertEquals("vineflower", vf.get("engine").getAsString());
+		String source = vf.get("source").getAsString();
+		assertTrue(source.contains("public class Inner"), source);
+		assertEquals(0, vf.getAsJsonArray("links").size());
+		assertError("NO_CLASS", engine.call("decompile", "session", s, "class", "no/Such", "engine", "vineflower"));
+
+		// A lone class file works too.
+		Path single = tmp.resolve("Greeter.class");
+		try (var zip = new java.util.zip.ZipFile(Fixtures.jar().toFile())) {
+			Files.copy(zip.getInputStream(zip.getEntry("fixture/Greeter.class")), single);
+		}
+		String one = result(engine.call("open", "path", single.toString())).get("session").getAsString();
+		String greeter = result(engine.call("decompile", "session", one, "class", "fixture/Greeter", "engine", "vineflower"))
+				.get("source").getAsString();
+		assertTrue(greeter.contains("greet(String"), greeter);
+
+		Path dex = Fixtures.dex(Files.createDirectories(tmp.resolve("vf-dex")));
+		JsonObject dexOpen = result(engine.call("open", "path", dex.toString()));
+		assertEquals("[\"jadx\"]", dexOpen.getAsJsonArray("engines").toString());
+		assertError("NO_ENGINE", engine.call("decompile", "session", dexOpen.get("session").getAsString(), "class",
+				"smalifix/Hello", "engine", "vineflower"));
+	}
+
 	private static List<String> spanTexts(JsonArray spans, JsonArray nodes, String[] lines) {
 		List<String> out = new ArrayList<>();
 		for (int i = 0; i < spans.size(); i += 4) {

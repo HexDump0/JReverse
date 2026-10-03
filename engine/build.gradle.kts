@@ -7,6 +7,7 @@ group = "io.github.hexdump0.jreverse"
 version = "0.1.0"
 
 val jadxVersion = "1.5.6"
+val vineflowerVersion = "1.12.0"
 
 java {
     toolchain {
@@ -29,6 +30,7 @@ dependencies {
     implementation("io.github.skylot:jadx-core:$jadxVersion")
     implementation("io.github.skylot:jadx-dex-input:$jadxVersion")
     implementation("io.github.skylot:jadx-java-input:$jadxVersion")
+    implementation("org.vineflower:vineflower:$vineflowerVersion")
     implementation("com.google.code.gson:gson:2.14.0")
     runtimeOnly("org.slf4j:slf4j-simple:2.0.18")
     compileOnly("org.jetbrains:annotations:26.1.0") // jadx's API uses them

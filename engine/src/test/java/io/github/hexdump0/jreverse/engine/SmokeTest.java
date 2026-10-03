@@ -51,6 +51,10 @@ class SmokeTest {
 				}
 				JsonObject usages = engine.call("usages", "session", session, "node", cls);
 				assertTrue(usages.has("result"), input.getKey() + ": " + usages);
+				if (input.getKey().equals("jar")) {
+					JsonObject vf = engine.call("decompile", "session", session, "class", cls, "engine", "vineflower");
+					assertTrue(vf.has("result"), "vineflower: " + vf);
+				}
 			}
 			assertTrue(engine.call("shutdown").has("result"));
 			assertEquals(0, engine.waitForExit());
