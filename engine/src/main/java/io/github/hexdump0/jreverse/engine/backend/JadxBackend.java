@@ -21,6 +21,7 @@ import jadx.api.JavaMethod;
 import jadx.api.JavaNode;
 import jadx.api.ResourceFile;
 import jadx.api.ResourceType;
+import jadx.api.args.GeneratedRenamesMappingFileMode;
 import jadx.api.data.ICodeComment;
 import jadx.api.data.ICodeRename;
 import jadx.api.data.impl.JadxCodeComment;
@@ -61,12 +62,21 @@ public final class JadxBackend implements Backend {
 		this.files = new ArchiveFiles(jadx);
 	}
 
-	public static JadxBackend load(Path input) throws RpcException {
+	/**
+	 * @param deobfuscate let jadx give short and clashing names generated
+	 *                    aliases ({@code C0123a}); ids stay the original names
+	 */
+	public static JadxBackend load(Path input, boolean deobfuscate) throws RpcException {
 		JadxArgs args = new JadxArgs();
 		args.setInputFile(input.toFile());
 		args.setPluginLoader(new JadxBasePluginLoader());
 		args.setSkipResources(true); // only the manifest is decoded, on demand
-		args.setDeobfuscationOn(false); // renames are JReverse's job, keyed by original names
+		args.setDeobfuscationOn(deobfuscate);
+		// jadx-gui's defaults; the API's own are 0 and unlimited, which renames nothing.
+		args.setDeobfuscationMinLength(3);
+		args.setDeobfuscationMaxLength(64);
+		// jadx would otherwise read or write a .jobf mapping file next to the user's file.
+		args.setGeneratedRenamesMappingFileMode(GeneratedRenamesMappingFileMode.IGNORE);
 		args.setShowInconsistentCode(true); // partial output beats none
 		args.setCodeData(new JadxCodeData());
 
@@ -136,6 +146,12 @@ public final class JadxBackend implements Backend {
 		} catch (Exception | StackOverflowError e) {
 			throw new RpcException(ErrorCode.DECOMPILE_FAILED, "no bytecode for " + classId + ": " + e, e);
 		}
+	}
+
+	/** The name jadx shows for a top-level class, after renames and deobfuscation. */
+	public String displayName(String classId) {
+		JavaClass cls = byId.get(classId);
+		return cls != null ? cls.getName() : classId.substring(classId.lastIndexOf('/') + 1);
 	}
 
 	public NodeInfo nodeInfo(String nodeId) throws RpcException {

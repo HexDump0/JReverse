@@ -52,6 +52,8 @@ pub struct Opened {
     pub class_count: u64,
     /// Decompilers that can read this file, jadx first.
     pub engines: Vec<String>,
+    /// Whether jadx generated names for short and clashing identifiers.
+    pub deobfuscated: bool,
     pub ms: u64,
 }
 
@@ -84,11 +86,14 @@ struct OpenResult {
     class_count: u64,
     #[serde(default)]
     engines: Vec<String>,
+    #[serde(default)]
+    deobfuscated: bool,
     ms: u64,
 }
 
 struct SessionEntry {
     path: PathBuf,
+    deobfuscate: bool,
     engine_id: String,
     generation: u64,
     /// The last `setCodeData` params, sent again after the file is reopened.
@@ -125,17 +130,31 @@ impl Engine {
         Self::new(Arc::new(move || launch.clone().and_then(|l| Pipes::spawn(&l))), sink)
     }
 
-    pub async fn open(&self, path: &Path) -> Result<Opened, EngineError> {
+    /// `deobfuscate` has jadx give short and clashing names generated aliases.
+    pub async fn open(&self, path: &Path, deobfuscate: bool) -> Result<Opened, EngineError> {
         let process = self.process().await?;
-        let opened: OpenResult = decode(process.request("open", json!({ "path": path })).await?)?;
+        let opened: OpenResult = decode(process.request("open", json!({ "path": path, "deobfuscate": deobfuscate })).await?)?;
         let mut sessions = self.sessions.lock().await;
         sessions.next += 1;
         let session = format!("session-{}", sessions.next);
         sessions.open.insert(
             session.clone(),
-            SessionEntry { path: path.to_path_buf(), engine_id: opened.session, generation: process.generation, code_data: None },
+            SessionEntry {
+                path: path.to_path_buf(),
+                deobfuscate,
+                engine_id: opened.session,
+                generation: process.generation,
+                code_data: None,
+            },
         );
-        Ok(Opened { session, kind: opened.kind, class_count: opened.class_count, engines: opened.engines, ms: opened.ms })
+        Ok(Opened {
+            session,
+            kind: opened.kind,
+            class_count: opened.class_count,
+            engines: opened.engines,
+            deobfuscated: opened.deobfuscated,
+            ms: opened.ms,
+        })
     }
 
     pub async fn list_classes(&self, session: &str) -> Result<Vec<ClassEntry>, EngineError> {
@@ -239,7 +258,8 @@ impl Engine {
             let entry = sessions.open.get_mut(session).ok_or_else(|| no_session(session))?;
             if entry.generation != process.generation {
                 log::info!("reopening {} after engine restart", entry.path.display());
-                let reopened: OpenResult = decode(process.request("open", json!({ "path": entry.path })).await?)?;
+                let reopened: OpenResult =
+                    decode(process.request("open", json!({ "path": entry.path, "deobfuscate": entry.deobfuscate })).await?)?;
                 entry.engine_id = reopened.session;
                 entry.generation = process.generation;
                 if let Some(code_data) = &entry.code_data {

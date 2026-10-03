@@ -249,6 +249,35 @@ class AnalysisTest {
 		assertEquals("table", table.get("kind").getAsString());
 	}
 
+	@Test
+	void deobfuscationGivesShortNamesAliasesButKeepsIds() throws Exception {
+		Path dex = Fixtures.dex(Files.createDirectories(tmp.resolve("deobf")));
+		JsonObject plain = result(engine.call("open", "path", dex.toString()));
+		assertFalse(plain.get("deobfuscated").getAsBoolean());
+		JsonObject plainA = classEntry(engine.call("listClasses", "session", plain.get("session").getAsString()), "ob/a");
+		assertFalse(plainA.has("name"), plainA.toString());
+
+		JsonObject open = result(engine.call("open", "path", dex.toString(), "deobfuscate", true));
+		assertTrue(open.get("deobfuscated").getAsBoolean());
+		String s = open.get("session").getAsString();
+		String alias = classEntry(engine.call("listClasses", "session", s), "ob/a").get("name").getAsString();
+		assertFalse(alias.equals("a"), alias);
+		String source = result(engine.call("decompile", "session", s, "class", "ob/a")).get("source").getAsString();
+		assertTrue(source.contains("class " + alias), source);
+		// Ids are still the original names, so notes carry over.
+		assertEquals("method", result(engine.call("node", "session", s, "node", "ob/a.b(I)I")).get("kind").getAsString());
+		assertFalse(Files.list(dex.getParent()).anyMatch(p -> p.toString().endsWith(".jobf")), "no mapping file next to the input");
+	}
+
+	private static JsonObject classEntry(JsonObject list, String id) {
+		for (JsonElement e : list.getAsJsonArray("result")) {
+			if (e.getAsJsonObject().get("id").getAsString().equals(id)) {
+				return e.getAsJsonObject();
+			}
+		}
+		throw new AssertionError("no " + id + " in " + list);
+	}
+
 	private static List<String> spanTexts(JsonArray spans, JsonArray nodes, String[] lines) {
 		List<String> out = new ArrayList<>();
 		for (int i = 0; i < spans.size(); i += 4) {

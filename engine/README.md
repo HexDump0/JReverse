@@ -34,9 +34,13 @@ logs go to stderr. The engine exits on `shutdown` or when stdin closes.
 
 | Method | Params | Result |
 |---|---|---|
-| `open` | `path` | `session`, `kind` (`apk` `aab` `aar` `jar` `dex` `class`), `classCount`, `engines`, `ms` |
-| `listClasses` | `session` | `[{id, kind}]`, top-level classes sorted by id |
+| `open` | `path`, `deobfuscate`? | `session`, `kind` (`apk` `aab` `aar` `jar` `dex` `class`), `classCount`, `engines`, `deobfuscated`, `ms` |
+| `listClasses` | `session` | `[{id, kind, name?}]`, top-level classes sorted by id; `name` when jadx shows another name (a rename, a generated alias) |
 | `decompile` | `session`, `class`, `engine`? (default `jadx`) | `source`, `engine`, `ms`, `warnings`, `links`, `decls`, `nodes` |
+
+**Deobfuscation.** `deobfuscate: true` has jadx give names shorter than 3
+or longer than 64 characters, and clashing ones, generated aliases such as
+`C0123a`. Ids stay the original names. No mapping file is read or written.
 
 **Decompilers.** `engines` in `open` lists the ones that can read the file:
 jadx always, Vineflower for JVM class files (JAR, AAR, a single class; not

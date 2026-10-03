@@ -20,10 +20,10 @@ public final class Sessions {
 	private final Map<String, Session> open = new ConcurrentHashMap<>();
 	private final AtomicInteger next = new AtomicInteger();
 
-	public Session open(Path path) throws RpcException {
+	public Session open(Path path, boolean deobfuscate) throws RpcException {
 		InputKind kind = InputDetector.detect(path);
-		JadxBackend jadx = JadxBackend.load(path);
-		Session session = new Session("s" + next.incrementAndGet(), path, kind, jadx);
+		JadxBackend jadx = JadxBackend.load(path, deobfuscate);
+		Session session = new Session("s" + next.incrementAndGet(), path, kind, jadx, deobfuscate);
 		open.put(session.id(), session);
 		return session;
 	}

@@ -120,7 +120,7 @@ async fn fake_engine(fakes: Arc<FakeEngines>, input: DuplexStream, output: Duple
 async fn open_list_decompile() {
     let fakes = FakeEngines::new(Boot::Normal);
     let engine = fakes.engine();
-    let opened = engine.open(Path::new("/x/app.jar")).await.unwrap();
+    let opened = engine.open(Path::new("/x/app.jar"), false).await.unwrap();
     assert_eq!(opened.kind, "jar");
     assert_eq!(opened.class_count, 2);
     let classes = engine.list_classes(&opened.session).await.unwrap();
@@ -133,7 +133,7 @@ async fn open_list_decompile() {
 async fn responses_are_routed_by_id() {
     let fakes = FakeEngines::new(Boot::Normal);
     let engine = fakes.engine();
-    let s = engine.open(Path::new("/x/app.jar")).await.unwrap().session;
+    let s = engine.open(Path::new("/x/app.jar"), false).await.unwrap().session;
     let (slow, fast) = tokio::join!(engine.decompile(&s, "a/Slow", None), engine.decompile(&s, "a/Fast", None));
     assert!(slow.unwrap().source.contains("a/Slow"));
     assert!(fast.unwrap().source.contains("a/Fast"));
@@ -143,7 +143,7 @@ async fn responses_are_routed_by_id() {
 async fn engine_errors_keep_their_code() {
     let fakes = FakeEngines::new(Boot::Normal);
     let engine = fakes.engine();
-    let s = engine.open(Path::new("/x/app.jar")).await.unwrap().session;
+    let s = engine.open(Path::new("/x/app.jar"), false).await.unwrap().session;
     let err = engine.decompile(&s, "no/Such", None).await.unwrap_err();
     assert_eq!(err.code(), "NO_CLASS");
     assert_eq!(
@@ -157,7 +157,7 @@ async fn engine_errors_keep_their_code() {
 async fn crash_fails_pending_requests_then_restarts_and_reopens() {
     let fakes = FakeEngines::new(Boot::Normal);
     let engine = Arc::new(fakes.engine());
-    let s = engine.open(Path::new("/x/app.jar")).await.unwrap().session;
+    let s = engine.open(Path::new("/x/app.jar"), false).await.unwrap().session;
 
     let pending = {
         let (engine, s) = (engine.clone(), s.clone());
@@ -177,7 +177,7 @@ async fn crash_fails_pending_requests_then_restarts_and_reopens() {
 async fn renames_are_sent_again_after_a_restart() {
     let fakes = FakeEngines::new(Boot::Normal);
     let engine = fakes.engine();
-    let s = engine.open(Path::new("/x/app.jar")).await.unwrap().session;
+    let s = engine.open(Path::new("/x/app.jar"), false).await.unwrap().session;
     let mut p = Map::new();
     p.insert("renames".into(), json!({"a/Fast": "Quick"}));
     engine.call(&s, "setCodeData", p).await.unwrap();
@@ -202,7 +202,7 @@ async fn progress_notifications_reach_the_sink() {
         })
     };
     let engine = fakes.engine_with(sink);
-    let s = engine.open(Path::new("/x/app.jar")).await.unwrap().session;
+    let s = engine.open(Path::new("/x/app.jar"), false).await.unwrap().session;
     let mut p = Map::new();
     p.insert("query".into(), "x".into());
     p.insert("ticket".into(), "t1".into());
@@ -215,14 +215,14 @@ async fn progress_notifications_reach_the_sink() {
 #[tokio::test]
 async fn rejects_other_protocol_versions() {
     let engine = FakeEngines::new(Boot::Protocol(PROTOCOL + 1)).engine();
-    let err = engine.open(Path::new("/x/app.jar")).await.unwrap_err();
+    let err = engine.open(Path::new("/x/app.jar"), false).await.unwrap_err();
     assert_eq!(err.code(), "ENGINE_PROTOCOL_MISMATCH");
 }
 
 #[tokio::test]
 async fn reports_engine_that_exits_on_startup() {
     let engine = FakeEngines::new(Boot::ExitImmediately).engine();
-    let err = engine.open(Path::new("/x/app.jar")).await.unwrap_err();
+    let err = engine.open(Path::new("/x/app.jar"), false).await.unwrap_err();
     assert_eq!(err.code(), "ENGINE_HANDSHAKE_FAILED");
 }
 
@@ -230,7 +230,7 @@ async fn reports_engine_that_exits_on_startup() {
 async fn missing_runtime_is_reported_on_use() {
     let launch = Launch::resolve(Some(Path::new("/definitely/not/here")));
     let engine = Engine::from_launch(launch, Arc::new(|_| {}));
-    let err = engine.open(Path::new("/x/app.jar")).await.unwrap_err();
+    let err = engine.open(Path::new("/x/app.jar"), false).await.unwrap_err();
     assert_eq!(err.code(), "ENGINE_NOT_FOUND");
 }
 
@@ -248,7 +248,7 @@ async fn real_engine_survives_being_killed() {
     let engine = Engine::from_launch(Ok(launch), Arc::new(|_| {}));
 
     // The engine jar is itself a good-sized JAR to decompile.
-    let opened = engine.open(&jar).await.unwrap();
+    let opened = engine.open(&jar, false).await.unwrap();
     assert_eq!(opened.kind, "jar");
     let classes = engine.list_classes(&opened.session).await.unwrap();
     assert_eq!(classes.len() as u64, opened.class_count);

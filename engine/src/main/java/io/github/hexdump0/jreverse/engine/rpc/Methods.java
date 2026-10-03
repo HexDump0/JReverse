@@ -56,10 +56,11 @@ final class Methods {
 			throw new RpcException(ErrorCode.OPEN_FAILED, "no such file: " + path);
 		}
 		long start = System.nanoTime();
-		Session session = sessions.open(path);
+		Session session = sessions.open(path, bool(params, "deobfuscate"));
 		JsonObject result = new JsonObject();
 		result.addProperty("session", session.id());
 		result.addProperty("kind", session.kind().wireName());
+		result.addProperty("deobfuscated", session.deobfuscated());
 		result.addProperty("classCount", session.classes().size());
 		JsonArray engines = new JsonArray();
 		session.engines().forEach(engines::add);
@@ -75,6 +76,11 @@ final class Methods {
 			JsonObject o = new JsonObject();
 			o.addProperty("id", cls.id());
 			o.addProperty("kind", cls.kind().wireName());
+			// Only when it differs from the id's own name, e.g. a deobfuscated C0123a.
+			String name = session.jadx().displayName(cls.id());
+			if (!cls.id().endsWith("/" + name) && !cls.id().equals(name)) {
+				o.addProperty("name", name);
+			}
 			list.add(o);
 		}
 		return list;

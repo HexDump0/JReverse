@@ -23,13 +23,20 @@ public final class Session implements AutoCloseable {
 	private final JadxBackend primary;
 	/** Other decompilers, loaded on first use. */
 	private final Map<String, Backend> others = new HashMap<>();
+	private final boolean deobfuscated;
 	private JsonObject overview;
 
-	Session(String id, Path path, InputKind kind, JadxBackend primary) {
+	Session(String id, Path path, InputKind kind, JadxBackend primary, boolean deobfuscated) {
 		this.id = id;
 		this.path = path;
 		this.kind = kind;
 		this.primary = primary;
+		this.deobfuscated = deobfuscated;
+	}
+
+	/** Whether jadx generated names for short and clashing identifiers. */
+	public boolean deobfuscated() {
+		return deobfuscated;
 	}
 
 	public String id() {

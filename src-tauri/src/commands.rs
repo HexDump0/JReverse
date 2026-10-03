@@ -9,8 +9,13 @@ use crate::projects::Projects;
 use crate::recents::{Recent, RecentView, Recents};
 
 #[tauri::command]
-pub async fn open_file(engine: State<'_, Engine>, recents: State<'_, Recents>, path: PathBuf) -> Result<Opened, EngineError> {
-    let opened = engine.open(&path).await?;
+pub async fn open_file(
+    engine: State<'_, Engine>,
+    recents: State<'_, Recents>,
+    path: PathBuf,
+    deobfuscate: Option<bool>,
+) -> Result<Opened, EngineError> {
+    let opened = engine.open(&path, deobfuscate.unwrap_or(false)).await?;
     recents.record(&path, &opened.kind, opened.class_count);
     Ok(opened)
 }
