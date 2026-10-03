@@ -187,6 +187,10 @@
     copy(fridaSnippet(node, decl ? doc.lines[decl.line] : undefined), `a Frida snippet for ${node.name}`);
   }
 
+  function copySource() {
+    if (doc) copy(doc.lines.join("\n"), tab.kind === "file" ? fileName(tab.path!) : `${ws.className(tab.cls ?? "")} (${fmtN(doc.lines.length)} lines)`);
+  }
+
   /** `Lcom/foo/Bar;->run(I)V`, the way smali and most hooking tools spell it. */
   function smaliRef(node: NodeInfo): string {
     if (node.kind === "class") return `L${node.id};`;
@@ -329,6 +333,7 @@
       { label: "Copy Frida snippet", key: "F", disabled: !inClass, run: frida },
       { label: node ? `Copy name ${node.name}` : "Copy name", disabled: !node, run: () => node && copy(node.name, node.name) },
       { label: "Copy smali reference", disabled: !node, run: () => node && copy(smaliRef(node), "the smali reference") },
+      { label: "Copy class source", key: "Ctrl Shift C", disabled: !doc, run: copySource },
       "-",
       { label: text ? `Search for ${text.length > 24 ? text.slice(0, 24) : text}` : "Search", key: "Ctrl Shift F", run: () => openSearch() },
     ];
@@ -378,6 +383,7 @@
           { label: "Comment", key: ";", disabled: tab.kind !== "class", run: comment },
           { label: "Bookmark line", key: "Ctrl B", disabled: tab.kind !== "class", run: bookmark },
           { label: "Copy Frida snippet", key: "F", disabled: tab.kind !== "class", run: frida },
+          { label: "Copy class source", key: "Ctrl Shift C", disabled: !doc || tab.kind === "overview", run: copySource },
           { label: tab.view === "smali" ? "Show Java" : isDex ? "Show smali" : "Show bytecode", key: "Tab", disabled: tab.kind !== "class", run: toggleView },
           ...(views.some((v) => v.view === "vineflower")
             ? [{ label: tab.view === "vineflower" ? "Show jadx output" : "Show Vineflower output", disabled: tab.kind !== "class", run: () => ws.setView(tab.view === "vineflower" ? "java" : "vineflower") }]
@@ -460,6 +466,7 @@
     else if (mod && key === "-") zoom(-1);
     else if (mod && key === "0") zoom(0);
     else if (mod && e.shiftKey && key === "e") focusClasses();
+    else if (mod && e.shiftKey && key === "c" && doc) copySource();
     else if (!typing && !mod && !e.altKey && inCode) {
       if (key === "d" || key === "Enter" || key === "F12") goToDeclaration();
       else if (key === "x") usages();

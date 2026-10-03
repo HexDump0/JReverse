@@ -31,6 +31,7 @@
         [["Ctrl B"], "Bookmark the line"],
         [["Esc"], "Back"],
         [["Ctrl S"], "Save the class"],
+        [["Ctrl Shift C"], "Copy the whole class"],
         [["Ctrl =", "Ctrl -"], "Text size"],
       ],
     },

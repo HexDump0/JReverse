@@ -257,6 +257,11 @@
     if (onboarding || paletteOpen || shortcutsOpen || !(e.ctrlKey || e.metaKey)) return;
     const key = e.key.toLowerCase();
     const inInput = e.target instanceof HTMLInputElement;
+    // Select all belongs to fields and the code view, never the whole window.
+    if (key === "a" && !inInput && !(e.target instanceof HTMLTextAreaElement) && !(e.target as Element).closest?.(".code")) {
+      e.preventDefault();
+      return;
+    }
     if (key === "o") browse();
     else if (key === "p") paletteOpen = !opening;
     else if (key === "w" && e.shiftKey && ws) closeFile();
@@ -365,6 +370,7 @@
     border-top: 1px solid var(--line);
   }
   .log pre {
+    user-select: text;
     margin: 0;
     padding: 10px 14px;
     font: 11.5px/1.6 var(--font-code);

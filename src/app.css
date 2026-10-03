@@ -67,6 +67,18 @@ body {
   overflow: hidden;
 }
 
+/* A desktop app: chrome isn't text. Code, fields and the overview are. */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+input,
+textarea,
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 * {
   scrollbar-color: #2b2f32 transparent;
 }

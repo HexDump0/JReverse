@@ -282,6 +282,16 @@
         if (!mod || e.shiftKey) return;
         openFind();
         break;
+      case "a": {
+        // Only the lines on screen exist in the DOM, so select those; Copy class source takes it all.
+        if (!mod) return;
+        const range = document.createRange();
+        range.selectNodeContents(scroller.querySelector(".sizer")!);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        break;
+      }
       case "F3":
         if (!findOpen) openFind();
         else jumpToMatch(findAt + (e.shiftKey ? -1 : 1));
@@ -310,7 +320,7 @@
 <div class="wrap">
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
-    class="code"
+    class="code selectable"
     role="textbox"
     aria-readonly="true"
     aria-multiline="true"

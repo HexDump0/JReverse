@@ -106,7 +106,7 @@
   );
 </script>
 
-<div class="page">
+<div class="page selectable">
   <div class="in">
     <header>
       <h1>{a?.label && !a.label.startsWith("@") ? a.label : ws.name}</h1>
