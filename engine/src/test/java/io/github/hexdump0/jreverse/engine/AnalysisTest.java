@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 
 /** Protocol v2: code links, smali, usages, search, export, overview and renames. */
@@ -126,6 +127,10 @@ class AnalysisTest {
 		assertError("BAD_REQUEST", engine.call("search", "session", jar, "query", "x", "scopes", array("nope")));
 		JsonArray limited = result(engine.call("search", "session", jar, "query", "e", "limit", 2)).getAsJsonArray("hits");
 		assertEquals(2, limited.size());
+		// The Tauri client sends null for options it doesn't set.
+		assertTrue(engine.call("search", "session", jar, "query", "greet", "limit", JsonNull.INSTANCE, "ticket", JsonNull.INSTANCE)
+				.has("result"));
+		assertError("BAD_REQUEST", engine.call("search", "session", jar, "query", "greet", "limit", "lots"));
 	}
 
 	@Test

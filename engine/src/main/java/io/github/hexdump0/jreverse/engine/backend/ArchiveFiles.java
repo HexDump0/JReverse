@@ -188,11 +188,16 @@ public final class ArchiveFiles {
 			nul = raw[i] == 0;
 		}
 		if (!nul) {
+			// Cut long text at a character boundary, not inside a multi-byte UTF-8 sequence.
+			int end = Math.min(raw.length, MAX_TEXT);
+			while (end < raw.length && end > 0 && (raw[end] & 0xC0) == 0x80) {
+				end--;
+			}
 			try {
 				String s = StandardCharsets.UTF_8.newDecoder()
 						.onMalformedInput(CodingErrorAction.REPORT)
-						.decode(ByteBuffer.wrap(raw, 0, Math.min(raw.length, MAX_TEXT))).toString();
-				return text(path, s, size);
+						.decode(ByteBuffer.wrap(raw, 0, end)).toString();
+				return new Content(path, "text", size, s, null, null, List.of(), end < raw.length);
 			} catch (CharacterCodingException e) {
 				// Binary after all.
 			}

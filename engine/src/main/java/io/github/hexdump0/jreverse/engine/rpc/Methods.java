@@ -89,7 +89,7 @@ final class Methods {
 	JsonElement decompile(JsonObject params) throws RpcException {
 		Session session = sessions.get(string(params, "session"));
 		String classId = string(params, "class");
-		String engine = params.has("engine") ? string(params, "engine") : Sessions.DEFAULT_ENGINE;
+		String engine = params.has("engine") && !params.get("engine").isJsonNull() ? string(params, "engine") : Sessions.DEFAULT_ENGINE;
 		Backend backend = session.backend(engine);
 		long start = System.nanoTime();
 		Decompiled out = backend.decompile(classId);
@@ -154,7 +154,7 @@ final class Methods {
 		if (scopes.isEmpty()) {
 			scopes = EnumSet.allOf(Search.Scope.class);
 		}
-		int limit = params.has("limit") ? params.get("limit").getAsInt() : DEFAULT_SEARCH_LIMIT;
+		int limit = optInt(params, "limit", DEFAULT_SEARCH_LIMIT);
 		Search search = new Search(jadx, string(params, "query"), bool(params, "regex"), bool(params, "caseSensitive"), scopes,
 				Math.max(1, limit));
 		String ticket = optString(params, "ticket");
@@ -351,6 +351,18 @@ final class Methods {
 
 	private static String optString(JsonObject params, String name) throws RpcException {
 		return params.has(name) && !params.get(name).isJsonNull() ? string(params, name) : null;
+	}
+
+	/** The client may send null for a missing optional param; both mean "use the default". */
+	private static int optInt(JsonObject params, String name, int fallback) throws RpcException {
+		JsonElement el = params.get(name);
+		if (el == null || el.isJsonNull()) {
+			return fallback;
+		}
+		if (!el.isJsonPrimitive() || !el.getAsJsonPrimitive().isNumber()) {
+			throw new RpcException(ErrorCode.BAD_REQUEST, name + " must be a number");
+		}
+		return el.getAsInt();
 	}
 
 	private static boolean bool(JsonObject params, String name) {
