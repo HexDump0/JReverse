@@ -70,10 +70,12 @@ method or field) and `decls` (the declarations among them) as flat arrays of
 four numbers per span: 0-based line, column (UTF-16 units), length, index
 into `nodes`.
 
-**Search** scopes are `classes`, `members`, `code` and `strings` (code
-matches inside string literals); all four when omitted. Code hits are
-`{type: "code"|"string", cls, line, col, len, text}`, one per line; name hits
-are `{type: "class"|"method"|"field", cls, node}`. Searching code decompiles
+**Search** scopes are `classes`, `members`, `code`, `strings` (code
+matches inside string literals) and `files` (resources and other text files,
+resources.arsc's values included); all of them when omitted. Code hits are
+`{type: "code"|"string", cls, line, col, len, text}`, one per line; file hits
+the same with `type: "file"` and `path` instead of `cls`; name hits are
+`{type: "class"|"method"|"field", cls, node}`. Searching code decompiles
 every class once, so the first search of a big APK takes a while; it sends
 `progress` notifications when given a `ticket`, and `cancel` stops it with a
 `CANCELLED` error. `export` works the same way.

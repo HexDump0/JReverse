@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 import jadx.api.JadxDecompiler;
 import jadx.api.ResourceFile;
@@ -116,6 +117,41 @@ public final class ArchiveFiles {
 			throw e;
 		} catch (Exception | StackOverflowError e) {
 			throw new RpcException(ErrorCode.DECODE_FAILED, "could not read " + path + ": " + e, e);
+		}
+	}
+
+	/** Text files bigger than this aren't searched. */
+	static final int MAX_SEARCHED = 2 << 20;
+
+	/**
+	 * Every file that reads as text, for search: decoded XML (resources.arsc's
+	 * values included, which decodes the table), configs, scripts, JSON. Big
+	 * and binary files are skipped.
+	 */
+	public synchronized void forEachText(BiConsumer<String, String> into) {
+		load();
+		for (ResourceFile r : List.copyOf(byPath.values())) {
+			long size = r.getZipEntry() != null ? r.getZipEntry().getUncompressedSize() : -1;
+			ResourceType t = r.getType();
+			boolean candidate = switch (t) {
+				case MANIFEST, XML, TEXT, JSON, HTML, ARSC -> true;
+				case UNKNOWN -> size >= 0 && size <= MAX_SEARCHED;
+				default -> false;
+			};
+			if (!candidate || (t != ResourceType.ARSC && size > MAX_SEARCHED)) {
+				continue;
+			}
+			try {
+				Content c = read(r.getOriginalName());
+				if (c.kind().equals("text")) {
+					into.accept(c.path(), c.text());
+				}
+			} catch (RpcException e) {
+				System.err.println("engine: search skipped " + r.getOriginalName() + ": " + e.getMessage());
+			}
+		}
+		for (Map.Entry<String, ResContainer> e : fromTable.entrySet()) {
+			into.accept(e.getKey(), e.getValue().getText().getCodeStr());
 		}
 	}
 

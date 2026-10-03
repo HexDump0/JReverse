@@ -235,6 +235,13 @@ class AnalysisTest {
 		assertEquals("AQACAP8=", blob.get("data").getAsString());
 		assertError("NO_FILE", engine.call("file", "session", s, "path", "nope.txt"));
 
+		JsonArray inFiles = hits(engine.call("search", "session", s, "query", "example.com", "scopes", array("files")));
+		assertEquals(1, inFiles.size(), inFiles.toString());
+		JsonObject hit = inFiles.get(0).getAsJsonObject();
+		assertEquals("file", hit.get("type").getAsString());
+		assertEquals("app.properties", hit.get("path").getAsString());
+		assertEquals(12, hit.get("col").getAsInt());
+
 		// An APK's resource table decodes into res/values files on request.
 		String apk = result(engine.call("open", "path", Fixtures.apk(Files.createDirectories(tmp.resolve("files-apk"))).toString()))
 				.get("session").getAsString();

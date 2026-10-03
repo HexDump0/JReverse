@@ -159,7 +159,7 @@ final class Methods {
 			for (Search.Hit h : r.hits()) {
 				JsonObject o = new JsonObject();
 				o.addProperty("type", h.type());
-				o.addProperty("cls", h.cls());
+				o.addProperty(h.type().equals("file") ? "path" : "cls", h.cls());
 				if (h.node() != null) {
 					o.add("node", node(h.node()));
 				} else {

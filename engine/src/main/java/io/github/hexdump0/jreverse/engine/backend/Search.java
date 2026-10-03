@@ -28,14 +28,14 @@ import io.github.hexdump0.jreverse.engine.rpc.RpcException;
 public final class Search {
 
 	public enum Scope {
-		CLASSES, MEMBERS, CODE, STRINGS
+		CLASSES, MEMBERS, CODE, STRINGS, FILES
 	}
 
 	/**
 	 * @param type {@code class}, {@code method} or {@code field} for name hits; {@code code} or {@code string}
-	 *             (inside a string literal) for code hits
+	 *             (inside a string literal) for code hits; {@code file} for a line in a resource or other file
 	 * @param node for name hits, what matched
-	 * @param cls  the top-level class to open
+	 * @param cls  the top-level class to open; for file hits, the file's path
 	 * @param line for code hits, 0-based; -1 for name hits
 	 */
 	public record Hit(String type, NodeInfo node, String cls, int line, int col, int len, String text) {
@@ -132,7 +132,41 @@ public final class Search {
 			code.sort(Comparator.comparing(Hit::cls).thenComparingInt(Hit::line).thenComparingInt(Hit::col));
 			hits.addAll(code.subList(0, Math.min(code.size(), limit - hits.size())));
 		}
+		if (!truncated && scopes.contains(Scope.FILES) && !cancelled.getAsBoolean()) {
+			List<Hit> found = new ArrayList<>();
+			jadx.files().forEachText((path, text) -> {
+				if (found.size() + hits.size() < limit) {
+					scanFile(path, text, found, limit - hits.size());
+				}
+			});
+			truncated = found.size() + hits.size() >= limit;
+			found.sort(Comparator.comparing(Hit::cls).thenComparingInt(Hit::line));
+			hits.addAll(found);
+		}
 		return new Result(hits, truncated, searched, (System.nanoTime() - start) / 1_000_000);
+	}
+
+	private void scanFile(String path, String text, List<Hit> into, int room) {
+		Matcher m = pattern.matcher(text);
+		if (!m.find()) {
+			return;
+		}
+		Lines lines = new Lines(text);
+		int lastLine = -1;
+		do {
+			int line = lines.line(m.start());
+			if (line == lastLine) {
+				continue;
+			}
+			lastLine = line;
+			if (into.size() >= room) {
+				return;
+			}
+			String l = lines.text(line);
+			int col = m.start() - lines.start(line);
+			int len = Math.max(0, Math.min(m.end(), lines.start(line) + l.length()) - m.start());
+			into.add(new Hit("file", null, path, line, col, len, l));
+		} while (m.find());
 	}
 
 	private void scan(String cls, String code, boolean stringsOnly, ConcurrentLinkedQueue<Hit> found, AtomicInteger count,
