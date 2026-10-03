@@ -35,6 +35,7 @@ export function buildTree(classes: ClassEntry[]): Pkg {
   }
   const finish = (p: Pkg): number => {
     p.pkgs.sort((a, b) => a.label.localeCompare(b.label));
+    p.classes.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     p.total = p.classes.length + p.pkgs.reduce((n, sub) => n + finish(sub), 0);
     // Merge a package that only holds one package: com > example > app becomes com.example.app.
     p.pkgs = p.pkgs.map((sub) => {

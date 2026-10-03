@@ -109,7 +109,8 @@ export function smaliDoc(cls: string, source: string, ms: number, known: (id: st
       }
     } else if (t.startsWith(".class ")) {
       const m = /L?([\w$/]+);?\s*$/.exec(t);
-      if (m) declared = { id: m[1], kind: "class", name: simple(m[1]), at: indent + m.index };
+      // Point at the simple name, the part a rename changes.
+      if (m) declared = { id: m[1], kind: "class", name: simple(m[1]), at: indent + m.index + m[0].indexOf(m[1]) + m[1].lastIndexOf("/") + 1 };
     }
     if (declared && declared.at >= 0) {
       const n = node(declared.id, declared.kind, declared.name);
