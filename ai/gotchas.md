@@ -8,6 +8,8 @@ Things that look wrong, break silently or have already wasted time. Add to this.
   `.git/info/exclude` (local, not `.gitignore`), so they don't show in
   `git status` and can't be committed. They exist only on the owner's machine.
   Read them, but don't assume another clone has them.
+- A new file in `src-tauri/engine-dist/` isn't copied to `target/debug/engine/` until tauri-build's
+  script reruns. `touch src-tauri/build.rs` forces it (seen with `vault-example.jar`).
 - `src-tauri/engine-dist/` is a build artifact (gitignored). If it's missing,
   the app reports "run `pnpm engine` to build it" on first use.
 
@@ -29,6 +31,12 @@ Things that look wrong, break silently or have already wasted time. Add to this.
 - Engine JVM runs with `-Xss8m`, because jadx recurses deeply on big methods.
 
 ## Testing
+
+- To screenshot the UI without a desktop window: run `pnpm dev --port 1420`, start headless
+  `chromium --remote-debugging-port`, inject a fake `window.__TAURI_INTERNALS__` (with `invoke`,
+  `transformCallback` and `metadata.currentWindow/currentWebview`) via CDP
+  `Page.addScriptToEvaluateOnNewDocument`, then `Page.captureScreenshot`. Node 22+ has a global
+  `WebSocket`, so no deps are needed. `homeDir()` goes through `plugin:path|resolve_directory`.
 
 - Gradle caches test results. `pnpm engine:test` can print UP-TO-DATE without
   running anything. Use `cd engine && ./gradlew test smokeTest --rerun-tasks`

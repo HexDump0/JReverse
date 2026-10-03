@@ -4,6 +4,12 @@ _Last verified: 2026-10-01_
 
 ## Works
 
+- No OS title bar; the app bar drags the window and has its buttons (2026-10-01).
+- First launch shows a one-screen onboarding; after it, the bundled example `vault-example.jar` is a default entry in the start screen's list (2026-10-01).
+- Start screen (2026-10-01): recent files kept by Rust (`recent.json` in the app data dir),
+  peek readout (first bytes + detected kind, or why it can't open), drag and drop, opening with
+  cancel (Esc), remove/clear with Ctrl Z undo, reveal in folder, locate a moved file, Ctrl P palette,
+  File/View menus, Log drawer. After a file opens, the old test view (`src/lib/Workbench.svelte`) shows.
 - Open → list classes → decompile, end to end, with JADX.
 - Inputs: APK, AAR, JAR (WAR is detected as JAR since its classes are plain
   `.class` entries), DEX, single `.class`. Detection reads file contents, not the extension.
@@ -17,7 +23,7 @@ _Last verified: 2026-10-01_
 
 Roughly in the order the design implies:
 
-- **Real UI.** The current page is a plain test bench. The target is
+- **Real UI.** The start screen is done; after opening, the page is still a plain test bench. The target is
   `design/mockup.html` + `design/DESIGN.md`: overview/triage page, package
   tree, split panes, Java/Smali/Graph/Hex views, `Ctrl+P` palette, references
   panel, status bar, themes.
@@ -33,7 +39,7 @@ Roughly in the order the design implies:
 
 ## Design
 
-- Start screen: approved mockup in `design/start-mockup.html` (2026-10-01), not implemented yet.
+- Start screen: implemented in `src/lib/start/` from `design/start-mockup.html` (2026-10-01).
 - Main workbench: `design/mockup.html` + `design/DESIGN.md`, not implemented yet.
 
 ## Repo state

@@ -23,11 +23,15 @@ src/                       src-tauri/src/                                engine/
   routes responses by id, and restarts it after a crash. Sessions survive a
   restart: the frontend holds `session-N` ids that map to the engine's own
   `sN` ids, and a file is reopened transparently after a restart.
-- **Tauri commands** (`src-tauri/src/commands.rs`): `open_file`,
-  `list_classes`, `decompile_class`, `close_session`. Events:
+- **Tauri commands** (`src-tauri/src/commands.rs`): `open_file` (also records the
+  file in recents), `list_classes`, `decompile_class`, `close_session`, `peek_file`
+  (`peek.rs`, mirrors `InputDetector`), `recent_files`, `forget_recent`, `replace_recents` (`recents.rs`), `example_file`. Events:
   `engine://status`, `engine://log`.
 - **Frontend** (`src/`): `src/lib/engine.ts` holds typed wrappers for the commands.
-  `src/routes/+page.svelte` is a temporary test page, not the real UI.
+  `src/routes/+page.svelte` owns app state and the open flow; `src/lib/shell/` has the
+  app bar, status bar and palette; `src/lib/start/StartScreen.svelte` is the start screen;
+  `src/lib/Workbench.svelte` is the temporary test view shown after a file opens.
+  `src/lib/java/highlight.ts` colours Java source (used by the welcome preview so far).
 - **Bundled runtime**: `pnpm engine` builds a fat jar and a jlink-trimmed
   JRE into `src-tauri/engine-dist/` (gitignored). Tauri bundles it as the
   `engine/` resource. Users never need Java.
@@ -40,6 +44,7 @@ src/                       src-tauri/src/                                engine/
 | `engine/src/main/java/.../engine/session/` | `InputDetector` (by magic bytes), `Session(s)` |
 | `engine/src/main/java/.../engine/backend/` | `Backend` interface + `JadxBackend`. Add new decompilers here. |
 | `engine/src/fixtures/` | Tiny Java classes compiled into `fixture.jar` for tests |
+| `engine/src/example/` | The bundled example app, built into `engine-dist/vault-example.jar` by `pnpm engine` |
 | `engine/build.gradle.kts` | Shadow jar, jlink runtime (`extraModules` / `excludedModules`), `smokeTest` |
 | `src-tauri/src/engine/` | `mod.rs` (Engine, sessions), `process.rs` (one JVM, routing), `locate.rs` (finding java and the jar), `tests.rs` |
 | `design/DESIGN.md`, `design/mockup.html` | The target UI, spec and full HTML mockup. **Local only**, see gotchas. |

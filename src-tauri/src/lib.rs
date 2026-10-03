@@ -1,11 +1,14 @@
 mod commands;
 pub mod engine;
+mod peek;
+mod recents;
 
 use std::sync::Arc;
 
 use tauri::{Emitter, Manager, RunEvent};
 
 use engine::{Engine, EngineEvent, EventSink, Launch};
+use recents::Recents;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,6 +33,7 @@ pub fn run() {
                 }
             });
             app.manage(Engine::from_launch(launch, sink));
+            app.manage(Recents::load(app.path().app_data_dir().ok().map(|d| d.join("recent.json"))));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -37,6 +41,11 @@ pub fn run() {
             commands::list_classes,
             commands::decompile_class,
             commands::close_session,
+            commands::peek_file,
+            commands::recent_files,
+            commands::forget_recent,
+            commands::replace_recents,
+            commands::example_file,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

@@ -44,6 +44,12 @@ effect itself. Use flat colours for everything else (no radial glows on selected
 Motion: none. The owner rejected a subtle GSAP pass (intro, light pulses, gliding ray) and wants no
 animation. Only functional progress indicators (spinner, loading progress) move.
 `design/start-mockup.html` is the approved direction for the start screen (2026-10-01).
+First run (2026-10-01): four rounds. Rejected: a landing page (tagline + paragraph + step cards), info written
+as a `Welcome.java` code view (gimmick), and a plain conventional column ("too simple", wasted space, wordy).
+Then mockups (`design/welcome-options.html`), a two-step intro with a feature list, and a live example
+preview: all dropped. Final call (owner's spec): a one-screen onboarding on first launch (logo, "A modern Java decompilation tool",
+one button), then the normal main menu with the bundled example as a default entry. General wording, no
+feature lists, no text that isn't needed. Don't scan the user's disk.
 
 ## Commands
 
@@ -58,3 +64,4 @@ pnpm check                     # svelte-check / TypeScript
 
 Debug overrides: `JREVERSE_JAVA`, `JREVERSE_ENGINE_JAR`,
 `JREVERSE_ENGINE_JVM_ARGS` (see `engine/README.md`).
+Frontend: `VITE_FIRST_RUN=1` (env or `.env`, see `.env.example`) shows onboarding every launch and hides recent files.

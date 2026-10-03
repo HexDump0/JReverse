@@ -22,6 +22,9 @@ repositories {
 // Small Java classes compiled into fixture.jar for tests; never shipped.
 val fixtures = sourceSets.create("fixtures")
 
+// The example app the start screen offers to first-time users; shipped.
+val example = sourceSets.create("example")
+
 dependencies {
     implementation("io.github.skylot:jadx-core:$jadxVersion")
     implementation("io.github.skylot:jadx-dex-input:$jadxVersion")
@@ -45,6 +48,12 @@ val fixtureJar = tasks.register<Jar>("fixtureJar") {
     archiveFileName = "fixture.jar"
     destinationDirectory = layout.buildDirectory.dir("fixtures")
     from(fixtures.output)
+}
+
+// Built like a release binary: no debug info, so it decompiles the way real apps do.
+tasks.named<JavaCompile>(example.compileJavaTaskName) {
+    options.release = 17
+    options.compilerArgs.add("-g:none")
 }
 
 tasks.jar {
@@ -130,10 +139,18 @@ val engineJar = tasks.register("engineJar") {
     doLast { jar.get().asFile.copyTo(out.asFile, overwrite = true) }
 }
 
+val exampleJar = tasks.register<Jar>("exampleJar") {
+    description = "Builds the bundled example app into src-tauri/engine-dist/vault-example.jar."
+    archiveFileName = "vault-example.jar"
+    destinationDirectory = distDir
+    from(example.output)
+    manifest.attributes("Main-Class" to "com.example.vault.Main")
+}
+
 val dist = tasks.register("dist") {
-    description = "Assembles engine.jar and the jlink runtime into src-tauri/engine-dist."
+    description = "Assembles engine.jar, the jlink runtime and the example app into src-tauri/engine-dist."
     group = "distribution"
-    dependsOn(engineJar, runtimeImage)
+    dependsOn(engineJar, runtimeImage, exampleJar)
 }
 
 // ---- Tests ------------------------------------------------------------------

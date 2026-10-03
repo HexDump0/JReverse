@@ -70,3 +70,52 @@ export function errorMessage(e: unknown): string {
   }
   return String(e);
 }
+
+/** First bytes of a file and what it is, without opening it. See src-tauri/src/peek.rs. */
+export interface Peek {
+  name: string;
+  size: number;
+  /** Up to the first 16 bytes. */
+  head: number[];
+  kind: InputKind | null;
+  /** e.g. "3 DEX files", "Java 21". */
+  detail: string | null;
+  classes: number | null;
+  problem: { title: string; text: string } | null;
+}
+
+export interface Recent {
+  path: string;
+  kind: InputKind;
+  classCount: number;
+  size: number;
+  /** Unix time in milliseconds. */
+  openedAt: number;
+}
+
+export interface RecentView extends Recent {
+  /** The file isn't at `path` any more. */
+  missing: boolean;
+}
+
+export function peekFile(path: string): Promise<Peek> {
+  return invoke("peek_file", { path });
+}
+
+export function recentFiles(): Promise<RecentView[]> {
+  return invoke("recent_files");
+}
+
+export function forgetRecent(path: string): Promise<RecentView[]> {
+  return invoke("forget_recent", { path });
+}
+
+/** Replaces the whole list, e.g. to undo a remove. */
+export function replaceRecents(entries: Recent[]): Promise<RecentView[]> {
+  return invoke("replace_recents", { entries });
+}
+
+/** The example app bundled with JReverse, or null if this build has none. */
+export function exampleFile(): Promise<string | null> {
+  return invoke("example_file");
+}

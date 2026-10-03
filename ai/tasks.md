@@ -10,19 +10,9 @@ _(none)_
 
 ## Next (owner's plan for the next session)
 
-- **Implement the start screen** from `design/start-mockup.html` in `src/`. It replaces the test
-  page's empty state. After a file opens, keep the old test view until the real shell exists.
-  What it needs beyond the mockup's HTML/CSS:
-  - Recent files kept by the Rust side, e.g. a JSON file in the app data dir with path, kind,
-    class count, size and last-opened time. Package name/version and "last location / renames /
-    comments" don't exist yet, so render them only when present.
-  - A cheap "peek" for the header readout: a Rust command that returns the first 16 bytes and the
-    detected kind without starting a full open (or reuse the engine's InputDetector rules).
-    Friendlier "this is a PDF / ELF" errors would need the same peek.
-  - Drag and drop already works via `getCurrentWebview().onDragDropEvent` (see the test page).
-  - Opening progress ("Loading classes 38 of 146") needs engine progress notifications. Protocol v1
-    has none, so start with an indeterminate spinner or add a notification (bump PROTOCOL in both places).
-  - Rules: Tabler icons inlined as SVG, no Unicode symbols, no animation, minimal gradients.
+- Start screen leftovers (2026-10-01): engine progress notifications for "38 of 146" (protocol has
+  none, the UI shows an indeterminate spinner); package name/version and "last at" for the Continue
+  card; the first-run shortcut list only shows Ctrl O / Ctrl P until N, X and Tab exist.
 - Open question for the owner: commit `design/` and `brand/`? They're in `.git/info/exclude`, so
   other clones and worktrees don't have the mockups.
 
