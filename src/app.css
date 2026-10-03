@@ -29,6 +29,19 @@
   --beam-shade: #6f82cf;
   --obf: #cba43a;
 
+  /* Code. The accent stays out of syntax colours: it marks where you are. */
+  --c-keyword: #d09ee6;
+  --c-type: #86cfc2;
+  --c-method: #e5c890;
+  --c-string: #a9cc8f;
+  --c-number: #ee9f82;
+  --c-comment: #6e6a64;
+  --c-annotation: #c6bd7c;
+  --c-warn-line: color-mix(in srgb, var(--warn) 7%, transparent);
+  --find: color-mix(in srgb, var(--warn) 26%, transparent);
+  --find-on: color-mix(in srgb, var(--warn) 55%, transparent);
+  --occ: color-mix(in srgb, var(--accent) 20%, transparent);
+
   --font-ui: "IBM Plex Sans", system-ui, sans-serif;
   --font-code: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
 
@@ -42,7 +55,9 @@
 
 * {
   box-sizing: border-box;
-  font-variant-ligatures: none;
+  /* JetBrains Mono would draw == and -> as one glyph. The `font` shorthand in
+     component styles resets font-variant-ligatures, hence !important. */
+  font-variant-ligatures: none !important;
   font-feature-settings: "liga" 0, "calt" 0;
 }
 
