@@ -492,6 +492,28 @@ export class Workspace {
     await this.codeDataChanged(name ? `Renamed ${node.name} to ${name}` : `Restored the name of ${node.name}`);
   }
 
+  /**
+   * Adds names and comments read from a mapping file. Your own renames and comments win over the
+   * file's, so importing never undoes work. Returns how many were added and how many were kept.
+   */
+  async addMappings(renames: Record<string, string>, comments: Record<string, string>, from: string) {
+    let names = 0;
+    let notes = 0;
+    let kept = 0;
+    for (const [id, name] of Object.entries(renames)) {
+      if (this.project.renames[id]) kept += this.project.renames[id] === name ? 0 : 1;
+      else (this.project.renames[id] = name), names++;
+    }
+    for (const [id, text] of Object.entries(comments)) {
+      if (!this.project.comments[id]) (this.project.comments[id] = text), notes++;
+    }
+    if (names || notes) {
+      const what = [names && `${fmtN(names)} ${names === 1 ? "name" : "names"}`, notes && `${fmtN(notes)} ${notes === 1 ? "comment" : "comments"}`].filter(Boolean).join(" and ");
+      await this.codeDataChanged(`Added ${what} from ${from}${kept ? `, kept ${fmtN(kept)} of your own` : ""}`);
+    }
+    return { names, notes, kept };
+  }
+
   async comment(node: Pick<NodeInfo, "id" | "name">, text: string | null) {
     if (text) this.project.comments[node.id] = text;
     else delete this.project.comments[node.id];

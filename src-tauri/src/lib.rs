@@ -53,6 +53,8 @@ pub fn run() {
             commands::search,
             commands::export_sources,
             commands::strings,
+            commands::read_mappings,
+            commands::write_mappings,
             commands::cancel_job,
             commands::overview,
             commands::set_code_data,

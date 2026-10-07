@@ -6,7 +6,7 @@
   import { tick, untrack } from "svelte";
   import { open as pickPath, save as pickSave } from "@tauri-apps/plugin-dialog";
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
-  import { cancelJob, errorMessage, exportSources, isFileHit, isNameHit, onEngineProgress, writeTextFile, type NodeInfo, type SearchHit, type Usage } from "$lib/engine";
+  import { cancelJob, errorMessage, exportSources, isFileHit, isNameHit, onEngineProgress, readMappings, writeMappings, writeTextFile, type MappingFormat, type NodeInfo, type SearchHit, type Usage } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
   import { fmtN, fmtSize } from "$lib/format";
   import { say, setTask } from "$lib/status.svelte";
@@ -340,6 +340,47 @@
     }
   }
 
+  const MAPPING_FILTERS: { name: string; extensions: string[]; format: MappingFormat }[] = [
+    { name: "ProGuard mapping", extensions: ["txt"], format: "proguard" },
+    { name: "Tiny v2", extensions: ["tiny"], format: "tiny2" },
+    { name: "Enigma", extensions: ["mapping", "mappings"], format: "enigma" },
+    { name: "TSRG v2", extensions: ["tsrg"], format: "tsrg2" },
+  ];
+
+  async function importMappings() {
+    const path = await pickPath({ multiple: false, directory: false, title: "Import mappings" });
+    if (typeof path !== "string") return;
+    const name = fileName(path);
+    setTask(`Reading ${name}`);
+    try {
+      const r = await readMappings(ws.session, path);
+      if (!r.matched) {
+        say(`None of the ${fmtN(r.mappings)} names in ${name} are in this file`, true);
+        return;
+      }
+      const added = await ws.addMappings(r.renames, r.comments, name);
+      if (!added.names && !added.notes) say(`${name} matches this file but adds nothing new`);
+    } catch (e) {
+      say(`Couldn't import ${name}: ${errorMessage(e)}`, true);
+    } finally {
+      setTask("");
+    }
+  }
+
+  async function exportMappings() {
+    const base = ws.name.replace(/\.[^.]+$/, "");
+    const path = await pickSave({ defaultPath: `${base}-mapping.txt`, filters: MAPPING_FILTERS.map(({ name, extensions }) => ({ name, extensions })) });
+    if (!path) return;
+    const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+    const format = MAPPING_FILTERS.find((f) => f.extensions.includes(ext))?.format ?? "proguard";
+    try {
+      const r = await writeMappings(ws.session, path, format, $state.snapshot(ws.project.renames), $state.snapshot(ws.project.comments));
+      say(`Wrote ${fmtN(r.written)} ${r.written === 1 ? "name" : "names"} to ${fileName(path)}`);
+    } catch (e) {
+      say(`Couldn't write ${fileName(path)}: ${errorMessage(e)}`, true);
+    }
+  }
+
   async function exportAll() {
     if (exporting) return;
     const dir = await pickPath({ directory: true, multiple: false, title: "Export sources to" });
@@ -509,6 +550,8 @@
         ? { label: "Show original names", run: () => reopen(false) }
         : { label: "Use generated names", run: () => reopen(true) },
       { label: "Save class as", key: "Ctrl S", disabled: !doc || tab.kind === "overview", run: saveClass },
+      { label: "Import mappings", run: importMappings },
+      { label: "Export mappings", disabled: !Object.keys(ws.project.renames).length, run: exportMappings },
       exporting
         ? { label: "Cancel export", run: () => exporting && cancelJob(exporting.ticket) }
         : { label: "Export all sources", run: exportAll },

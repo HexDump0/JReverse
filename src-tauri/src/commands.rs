@@ -84,6 +84,24 @@ pub async fn strings(engine: State<'_, Engine>, session: String, ticket: Option<
 }
 
 #[tauri::command]
+pub async fn read_mappings(engine: State<'_, Engine>, session: String, path: PathBuf) -> Result<Value, EngineError> {
+    engine.call(&session, "readMappings", params(json!({ "path": path }))).await
+}
+
+#[tauri::command]
+pub async fn write_mappings(
+    engine: State<'_, Engine>,
+    session: String,
+    path: PathBuf,
+    format: String,
+    renames: Value,
+    comments: Value,
+) -> Result<Value, EngineError> {
+    let p = json!({ "path": path, "format": format, "renames": renames, "comments": comments });
+    engine.call(&session, "writeMappings", params(p)).await
+}
+
+#[tauri::command]
 pub async fn cancel_job(engine: State<'_, Engine>, ticket: String) -> Result<(), EngineError> {
     engine.cancel(&ticket).await
 }

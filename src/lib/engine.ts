@@ -293,6 +293,32 @@ export function listStrings(session: string, ticket?: string): Promise<{ strings
   return invoke("strings", { session, ticket });
 }
 
+export type MappingFormat = "proguard" | "tiny2" | "enigma" | "tsrg2";
+
+export interface MappingsRead {
+  /** mapping-io's name for it, e.g. "ProGuard file". */
+  format: string;
+  renames: Record<string, string>;
+  comments: Record<string, string>;
+  /** Classes, methods and fields that matched this file, of `mappings` in the mapping file. */
+  matched: number;
+  mappings: number;
+}
+
+export function readMappings(session: string, path: string): Promise<MappingsRead> {
+  return invoke("read_mappings", { session, path });
+}
+
+export function writeMappings(
+  session: string,
+  path: string,
+  format: MappingFormat,
+  renames: Record<string, string>,
+  comments: Record<string, string>,
+): Promise<{ written: number }> {
+  return invoke("write_mappings", { session, path, format, renames, comments });
+}
+
 export function cancelJob(ticket: string): Promise<void> {
   return invoke("cancel_job", { ticket });
 }
