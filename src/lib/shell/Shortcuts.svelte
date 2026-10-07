@@ -25,7 +25,7 @@
         [["X"], "Find usages"],
         [["N"], "Rename"],
         [[";"], "Comment"],
-        [["F", "Y"], "Copy a Frida or Xposed snippet"],
+        [["F", "Y"], "Copy a Frida or Xposed snippet (Android code)"],
         [["Tab"], "Java or smali / bytecode"],
         [["Ctrl F", "F3"], "Find in the class, next match"],
         [["Ctrl G"], "Go to line"],

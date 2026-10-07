@@ -23,7 +23,7 @@
   import SearchPanel from "./SearchPanel.svelte";
   import UsagesPanel from "./UsagesPanel.svelte";
   import { enclosing, linkAt, wordAt, type Link, type Pos, type View } from "./doc";
-  import { fridaSnippet, xposedSnippet } from "./hooks";
+  import { copyAs, copyFormats, FORMAT_LABEL, isMod, type CopyFormat } from "./hooks";
   import { originalMember, ownerOf } from "./ids";
   import { dotted, simpleName, type Tab, type Workspace } from "./workspace.svelte";
 
@@ -248,30 +248,25 @@
     }
   }
 
-  function frida() {
-    if (!doc || tab.kind !== "class") return;
+  /** Frida and Xposed for Android code; Java names, descriptors and Mixin for JVM code. */
+  const formats = $derived(copyFormats(ws.opened.kind, isMod(ws.info)));
+  const FORMAT_KEY: Partial<Record<CopyFormat, string>> = { frida: "F", xposed: "Y" };
+
+  function copyNode(format: CopyFormat) {
+    if (!doc || tab.kind !== "class" || !formats.includes(format)) return;
     const node = target()?.node ?? enclosing(doc, tab.caret.line);
     if (!node) return;
     const decl = doc.decls.get(node.id);
-    copy(fridaSnippet(node, decl ? doc.lines[decl.line] : undefined), `a Frida snippet for ${node.name}`);
+    copy(copyAs(format, node, decl ? doc.lines[decl.line] : undefined), `the ${FORMAT_LABEL[format]} for ${node.name}`);
   }
+
+  const copyItems = (disabled: boolean) =>
+    formats.map((f) => ({ label: `Copy as ${FORMAT_LABEL[f]}`, key: FORMAT_KEY[f], disabled, run: () => copyNode(f) }));
 
   function copySource() {
     if (doc) copy(doc.lines.join("\n"), tab.kind === "file" ? fileName(tab.path!) : `${ws.className(tab.cls ?? "")} (${fmtN(doc.lines.length)} lines)`);
   }
 
-  function xposed() {
-    if (!doc || tab.kind !== "class") return;
-    const node = target()?.node ?? enclosing(doc, tab.caret.line);
-    if (node) copy(xposedSnippet(node), `an Xposed snippet for ${node.name}`);
-  }
-
-  /** `Lcom/foo/Bar;->run(I)V`, the way smali and most hooking tools spell it. */
-  function smaliRef(node: NodeInfo): string {
-    if (node.kind === "class") return `L${node.id};`;
-    const owner = ownerOf(node.id);
-    return `L${owner};->${node.id.slice(owner.length + 1)}`;
-  }
 
   function bookmark() {
     if (!doc || tab.kind !== "class" || !tab.cls) return;
@@ -415,10 +410,8 @@
       { label: "Comment", key: ";", disabled: !inClass, run: comment },
       { label: "Bookmark line", key: "Ctrl B", disabled: !inClass, run: bookmark },
       "-",
-      { label: "Copy Frida snippet", key: "F", disabled: !inClass, run: frida },
-      { label: "Copy Xposed snippet", key: "Y", disabled: !inClass, run: xposed },
       { label: node ? `Copy name ${node.name}` : "Copy name", disabled: !node, run: () => node && copy(node.name, node.name) },
-      { label: "Copy smali reference", disabled: !node, run: () => node && copy(smaliRef(node), "the smali reference") },
+      ...copyItems(!inClass),
       { label: "Copy class source", key: "Ctrl Shift C", disabled: !doc, run: copySource },
       "-",
       { label: text ? `Search for ${text.length > 24 ? text.slice(0, 24) : text}` : "Search", key: "Ctrl Shift F", run: () => openSearch() },
@@ -440,8 +433,7 @@
         { label: "Find usages", run: () => ws.findUsages(node) },
         "-",
         { label: "Copy name", run: () => copy(dotted(cls), dotted(cls)) },
-        { label: "Copy Frida snippet", run: () => copy(fridaSnippet(node), "a Frida snippet") },
-        { label: "Copy Xposed snippet", run: () => copy(xposedSnippet(node), "an Xposed snippet") },
+        ...formats.map((f) => ({ label: `Copy as ${FORMAT_LABEL[f]}`, run: () => copy(copyAs(f, node), `the ${FORMAT_LABEL[f]} for ${node.name}`) })),
       ],
     };
   }
@@ -469,8 +461,7 @@
           { label: "Rename", key: "N", disabled: tab.kind !== "class", run: rename },
           { label: "Comment", key: ";", disabled: tab.kind !== "class", run: comment },
           { label: "Bookmark line", key: "Ctrl B", disabled: tab.kind !== "class", run: bookmark },
-          { label: "Copy Frida snippet", key: "F", disabled: tab.kind !== "class", run: frida },
-          { label: "Copy Xposed snippet", key: "Y", disabled: tab.kind !== "class", run: xposed },
+          ...copyItems(tab.kind !== "class"),
           { label: "Copy class source", key: "Ctrl Shift C", disabled: !doc || tab.kind === "overview", run: copySource },
           { label: tab.view === "smali" ? "Show Java" : isDex ? "Show smali" : "Show bytecode", key: "Tab", disabled: tab.kind !== "class", run: toggleView },
           ...(views.some((v) => v.view === "vineflower")
@@ -566,8 +557,8 @@
       else if (key === "x") usages();
       else if (key === "n") rename();
       else if (key === ";") comment();
-      else if (key === "f") frida();
-      else if (key === "y") xposed();
+      else if (key === "f") copyNode("frida");
+      else if (key === "y") copyNode("xposed");
       else if (key === "Tab" && !e.shiftKey) toggleView();
       else if (key === "Escape" && ws.usages) ws.usages = null;
       else if (key === "Escape") ws.goBack();

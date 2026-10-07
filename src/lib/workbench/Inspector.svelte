@@ -1,13 +1,13 @@
 <script lang="ts">
   // Everything about the name under the caret, or the member the caret is in:
   // what it is, where it's used (fetched as the caret moves), what it calls,
-  // your rename and comment, and a Frida hook to copy.
+  // your rename and comment, and the name or a hook to copy in the form the file calls for.
   import { errorMessage, findUsages, type NodeInfo, type Usage } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
   import { fmtN } from "$lib/format";
   import { highlight } from "$lib/java/highlight";
   import { enclosing, linkAt, type Doc, type Pos } from "./doc";
-  import { fridaSnippet } from "./hooks";
+  import { copyAs, copyFormats, FORMAT_LABEL, isMod, type CopyFormat } from "./hooks";
   import { originalMember, ownerOf } from "./ids";
   import Snippet from "./Snippet.svelte";
   import { dotted, simpleName, type Tab, type Workspace } from "./workspace.svelte";
@@ -101,7 +101,32 @@
     return n ? `Used in ${places}` : "Not used in this file";
   });
 
-  const frida = $derived(node ? fridaSnippet(node, decl && doc ? doc.lines[decl.line] : undefined) : "");
+  /* ---------- copy as ---------- */
+  const COPY_KEY = "jreverse.copyAs";
+  const formats = $derived(copyFormats(ws.opened.kind, isMod(ws.info)));
+  let saved: { format?: CopyFormat; open?: boolean } = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(COPY_KEY) ?? "{}");
+  } catch {
+    // No storage: start with the defaults.
+  }
+  let chosen = $state<CopyFormat | undefined>(saved.format);
+  let showSnippet = $state(saved.open ?? false);
+  const format = $derived(chosen && formats.includes(chosen) ? chosen : formats[0]);
+  const copyText = $derived(node ? copyAs(format, node, decl && doc ? doc.lines[decl.line] : undefined) : "");
+  const multiline = $derived(copyText.includes("\n"));
+
+  function pick(f: CopyFormat) {
+    chosen = f;
+    remember();
+  }
+  function remember() {
+    try {
+      localStorage.setItem(COPY_KEY, JSON.stringify({ format: chosen, open: showSnippet }));
+    } catch {
+      // Not remembered; nothing else depends on it.
+    }
+  }
 
   const kindLetter = (n: NodeInfo) => (n.kind === "class" ? "C" : n.kind === "method" ? "m" : "f");
   const kindClass = (n: NodeInfo) => (n.kind === "class" ? "k-c" : n.kind === "method" ? "k-m" : "k-f");
@@ -186,8 +211,24 @@
       {/if}
 
       <div class="sec">
-        <div class="sh"><h3>Hook with Frida</h3><button class="more" title="Copy (F)" onclick={() => oncopy(frida, `a Frida snippet for ${node.name}`)}>Copy</button></div>
-        <pre class="frida selectable">{@render code(frida)}</pre>
+        <div class="sh">
+          {#if multiline}
+            <button class="fold" aria-expanded={showSnippet} onclick={() => ((showSnippet = !showSnippet), remember())}>
+              <Icon name={showSnippet ? "chevronDown" : "chevronRight"} size={14} /><h3>Copy as</h3>
+            </button>
+          {:else}
+            <h3>Copy as</h3>
+          {/if}
+          <span class="fmts" role="radiogroup" aria-label="Format">
+            {#each formats as f (f)}
+              <button class="fmt" role="radio" aria-checked={f === format} class:on={f === format} onclick={() => pick(f)}>{FORMAT_LABEL[f]}</button>
+            {/each}
+          </span>
+          <button class="more" onclick={() => oncopy(copyText, `the ${FORMAT_LABEL[format]} ${multiline ? "snippet" : "name"} for ${node.name}`)}>Copy</button>
+        </div>
+        {#if showSnippet || !multiline}
+          <pre class="frida selectable" class:one={!multiline}>{@render code(copyText)}</pre>
+        {/if}
       </div>
     {/if}
   </div>
@@ -374,6 +415,37 @@
   }
   .dim {
     color: var(--text-3);
+  }
+  .fold {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: -4px;
+    color: var(--text-3);
+  }
+  .fold:hover h3 {
+    color: var(--text-hi);
+  }
+  .fmts {
+    display: flex;
+    gap: 2px;
+  }
+  .fmt {
+    padding: 3px 7px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    color: var(--text-3);
+  }
+  .fmt:hover {
+    color: var(--text);
+  }
+  .fmt.on {
+    color: var(--text-hi);
+    background: var(--hover);
+  }
+  .frida.one {
+    padding: 8px 12px;
+    white-space: nowrap;
   }
   .frida {
     margin: 0 12px 4px;

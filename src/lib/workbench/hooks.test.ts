@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NodeInfo } from "$lib/engine";
-import { fridaSnippet, paramNames, xposedSnippet } from "./hooks";
+import { fridaSnippet, javaReference, mixinSnippet, paramNames, smaliReference, xposedSnippet } from "./hooks";
 
 const method = (id: string, detail: string, frida: string[]): NodeInfo => ({
   kind: "method",
@@ -63,5 +63,35 @@ describe("xposedSnippet", () => {
   it("hooks constructors with findAndHookConstructor", () => {
     const ctor = method("com/x/A.<init>()V", "A()", []);
     expect(xposedSnippet(ctor).split("\n")[0]).toBe('XposedHelpers.findAndHookConstructor("com.x.A", classLoader, new XC_MethodHook() {');
+  });
+});
+
+describe("JVM formats", () => {
+  const verify = method("com/x/License.verify(Ljava/lang/String;[B)Z", "verify(String, byte[]): boolean", ["java.lang.String", "[B"]);
+
+  it("names a member as a reference and a descriptor", () => {
+    expect(javaReference(verify)).toBe("com.x.License#verify(String, byte[])");
+    expect(javaReference(method("com/x/A$Inner.<init>(Lcom/y/Z;)V", "Inner(Z)", ["com.y.Z"]))).toBe("com.x.A.Inner#Inner(com.y.Z)");
+    expect(smaliReference(verify)).toBe("Lcom/x/License;->verify(Ljava/lang/String;[B)Z");
+  });
+
+  it("injects at the head of a method with its parameters", () => {
+    expect(mixinSnippet(verify, "    public static boolean verify(String key, byte[] data) {")).toBe(
+      [
+        '@Mixin(targets = "com.x.License")',
+        "public abstract class LicenseMixin {",
+        '    @Inject(method = "verify(Ljava/lang/String;[B)Z", at = @At("HEAD"))',
+        "    private static void onVerify(String key, byte[] data, CallbackInfoReturnable<Boolean> cir) {",
+        "    }",
+        "}",
+      ].join("\n"),
+    );
+  });
+
+  it("injects at the end of a constructor and reads fields with an accessor", () => {
+    const ctor = { ...method("com/x/A.<init>(J)V", "A(long)", ["long"]), static: false };
+    expect(mixinSnippet(ctor)).toContain('@Inject(method = "<init>(J)V", at = @At("TAIL"))\n    private void onInit(long arg0, CallbackInfo ci)');
+    const field: NodeInfo = { kind: "field", id: "com/x/A.ready:Z", top: "com/x/A", name: "ready", detail: "boolean", access: "private", static: false };
+    expect(mixinSnippet(field)).toContain('@Accessor("ready")\n    boolean isReady();');
   });
 });

@@ -1,5 +1,5 @@
 // Frida and Xposed hooks for a method, field or class, in the shapes jadx-gui's snippets use.
-import type { NodeInfo } from "$lib/engine";
+import type { NodeInfo, Overview } from "$lib/engine";
 import { originalMember, ownerOf } from "./ids";
 
 /** `com/foo/Bar$Inner` as Java.use wants it: `com.foo.Bar$Inner`. */
@@ -122,4 +122,125 @@ export function xposedSnippet(node: NodeInfo): string {
     "    }",
     "});",
   ].join("\n");
+}
+
+const PRIM: Record<string, string> = { Z: "boolean", B: "byte", S: "short", C: "char", I: "int", J: "long", F: "float", D: "double", V: "void" };
+const BOXED: Record<string, string> = { boolean: "Boolean", byte: "Byte", short: "Short", char: "Character", int: "Integer", long: "Long", float: "Float", double: "Double" };
+
+/** A JVM descriptor type (`I`, `[Ljava/lang/String;`) as Java source spells it; `java.lang` is left out. */
+export function descriptorType(desc: string): string {
+  const dims = /^\[+/.exec(desc)?.[0].length ?? 0;
+  const elem = desc.slice(dims);
+  const name = PRIM[elem] ?? elem.slice(1, -1).replaceAll("/", ".").replaceAll("$", ".");
+  return (JAVA_LANG.test(name) ? name.slice(10) : name) + "[]".repeat(dims);
+}
+
+/** Splits `(ILjava/lang/String;[B)Z` into its argument and return types. */
+function parseMethodDescriptor(desc: string): { args: string[]; ret: string } {
+  const args: string[] = [];
+  let i = desc.indexOf("(") + 1;
+  while (desc[i] !== ")") {
+    let j = i;
+    while (desc[j] === "[") j++;
+    j = desc[j] === "L" ? desc.indexOf(";", j) + 1 : j + 1;
+    args.push(desc.slice(i, j));
+    i = j;
+  }
+  return { args, ret: desc.slice(i + 1) };
+}
+
+/** `com.foo.Bar#run(int, String)`, the way Javadoc links and IDE references spell a member. */
+export function javaReference(node: NodeInfo): string {
+  const owner = javaName(node.kind === "class" ? node.id : ownerOf(node.id)).replaceAll("$", ".");
+  if (node.kind === "class") return owner;
+  if (node.kind === "field") return `${owner}#${originalMember(node.id)}`;
+  const member = node.id.slice(node.id.indexOf(".") + 1);
+  const { args } = parseMethodDescriptor(member);
+  const name = member.startsWith("<init>") ? owner.slice(owner.lastIndexOf(".") + 1) : originalMember(node.id);
+  return `${owner}#${name}(${args.map(descriptorType).join(", ")})`;
+}
+
+/** `com/foo/Bar.run(I)V`: ASM, javap -s, Recaf and Mixin all name members this way. */
+export const jvmDescriptor = (node: NodeInfo) => node.id;
+
+/** `Lcom/foo/Bar;->run(I)V`, the way smali and most Android hooking tools spell it. */
+export function smaliReference(node: NodeInfo): string {
+  if (node.kind === "class") return `L${node.id};`;
+  const owner = ownerOf(node.id);
+  return `L${owner};->${node.id.slice(owner.length + 1)}`;
+}
+
+/** A Mixin class that injects into a method, reads a field, or targets a class. */
+export function mixinSnippet(node: NodeInfo, declLine?: string): string {
+  const owner = node.kind === "class" ? node.id : ownerOf(node.id);
+  const simple = varName(owner).replace(/Mixin$/, "");
+  // `targets` takes the binary name, so it works for private and inner classes and needs no import.
+  const head = `@Mixin(targets = "${javaName(owner)}")`;
+  if (node.kind === "class") return `${head}\npublic abstract class ${simple}Mixin {\n}`;
+  if (node.kind === "field") {
+    const name = originalMember(node.id);
+    const type = descriptorType(node.id.slice(node.id.indexOf(":") + 1));
+    const getter = `${type === "boolean" ? "is" : "get"}${name[0].toUpperCase()}${name.slice(1)}`;
+    const body = node.static ? `static ${type} ${getter}() {\n        throw new AssertionError();\n    }` : `${type} ${getter}();`;
+    return `${head}\npublic interface ${simple}Accessor {\n    @Accessor("${name}")\n    ${body}\n}`;
+  }
+  const member = node.id.slice(node.id.indexOf(".") + 1);
+  const { args, ret } = parseMethodDescriptor(member);
+  const isInit = member.startsWith("<init>");
+  const raw = originalMember(node.id);
+  const names = paramNames(declLine, args.length);
+  const returnType = descriptorType(ret);
+  const callback = ret === "V" || isInit ? "CallbackInfo ci" : `CallbackInfoReturnable<${BOXED[returnType] ?? returnType}> cir`;
+  const params = [...args.map((a, i) => `${descriptorType(a)} ${names[i]}`), callback].join(", ");
+  const capital = raw[0].toUpperCase() + raw.slice(1);
+  const handler = isInit ? "onInit" : raw === "<clinit>" ? "onStaticInit" : /^on[A-Z]/.test(raw) ? raw : `on${capital}`;
+  // A constructor can only be injected into once it has called super(), so at its end.
+  const at = isInit ? "TAIL" : "HEAD";
+  return [
+    head,
+    `public abstract class ${simple}Mixin {`,
+    `    @Inject(method = "${member}", at = @At("${at}"))`,
+    `    private ${node.static ? "static " : ""}void ${handler}(${params}) {`,
+    "    }",
+    "}",
+  ].join("\n");
+}
+
+/** A Minecraft mod, or anything with mixins: where a Mixin injector is worth offering. */
+export const isMod = (o: Overview | null | undefined) =>
+  !!o && (!!o.mixinConfigs?.length || !!o.plugins?.some((p) => ["fabric", "quilt", "forge", "neoforge"].includes(p.loader)));
+
+export type CopyFormat = "frida" | "xposed" | "smali" | "reference" | "descriptor" | "mixin";
+
+export const FORMAT_LABEL: Record<CopyFormat, string> = {
+  frida: "Frida",
+  xposed: "Xposed",
+  smali: "Smali",
+  reference: "Reference",
+  descriptor: "Descriptor",
+  mixin: "Mixin",
+};
+
+/** What to offer for a file: Android hooks for Android code, JVM names (and Mixin for mods) otherwise. */
+export function copyFormats(kind: string, mod: boolean): CopyFormat[] {
+  if (kind === "apk" || kind === "aab" || kind === "dex") return ["frida", "xposed", "smali"];
+  if (kind === "aar") return ["frida", "xposed", "descriptor"];
+  return mod ? ["mixin", "reference", "descriptor"] : ["reference", "descriptor"];
+}
+
+export function copyAs(format: CopyFormat, node: NodeInfo, declLine?: string): string {
+  switch (format) {
+    case "frida":
+      return fridaSnippet(node, declLine);
+    case "xposed":
+      return xposedSnippet(node);
+    case "smali":
+      return smaliReference(node);
+    case "reference":
+      return javaReference(node);
+    case "descriptor":
+      return jvmDescriptor(node);
+    case "mixin":
+      return mixinSnippet(node, declLine);
+  }
 }
