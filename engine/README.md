@@ -106,7 +106,7 @@ side}]}]`, `services: [{service, providers}]` from `META-INF/services`,
 cls, urls}`, `listeners`). For JAR and class input: `mixinTargets` (mixin
 class to the classes it targets) and `entryClasses: [{cls, kind, detail}]`
 for entry points found by annotation or interface (`neoforge`, `forge`,
-`servlet`, `filter`, `listener`, `spring-boot`, `burp`). Class names in
+`servlet`, `filter`, `listener`, `spring-boot`). Class names in
 all of these are Java names with `$` for inner classes.
 
 **Files.** `file` returns `kind` `text` (binary XML decoded; plain text up to

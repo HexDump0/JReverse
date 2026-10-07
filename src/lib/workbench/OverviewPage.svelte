@@ -63,7 +63,6 @@
       filter: "filter",
       listener: "listener",
       "spring-boot": "@SpringBootApplication",
-      burp: "Burp extension",
     };
     for (const e of o.entryClasses ?? []) {
       // @Mod carries the mod id; servlets and filters their URL patterns.
@@ -131,7 +130,6 @@
   /** What sort of program this is, from the strongest evidence the file has. */
   const typeName = $derived.by(() => {
     if (plugin) return LOADER[plugin.loader][1];
-    if (o?.entryClasses?.some((e) => e.kind === "burp")) return "Burp extension";
     if (isWeb) return "Web app";
     if (jm["Start-Class"] || o?.entryClasses?.some((e) => e.kind === "spring-boot")) return "Spring Boot app";
     if (jm["Premain-Class"] || jm["Agent-Class"]) return "Java agent";

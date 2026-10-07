@@ -31,7 +31,6 @@ import jadx.api.JavaNode;
 import jadx.api.plugins.input.data.annotations.EncodedType;
 import jadx.api.plugins.input.data.annotations.EncodedValue;
 import jadx.api.plugins.input.data.annotations.IAnnotation;
-import jadx.core.dex.instructions.args.ArgType;
 import jadx.core.dex.nodes.ClassNode;
 
 /**
@@ -56,9 +55,6 @@ final class Jvm {
 			"Ljakarta/servlet/annotation/WebListener;", "listener",
 			"Ljavax/servlet/annotation/WebListener;", "listener",
 			"Lorg/springframework/boot/autoconfigure/SpringBootApplication;", "spring-boot");
-	private static final Map<String, String> ENTRY_INTERFACES = Map.of(
-			"burp.api.montoya.BurpExtension", "burp",
-			"burp.IBurpExtender", "burp");
 	private static final String MIXIN = "Lorg/spongepowered/asm/mixin/Mixin;";
 
 	private Jvm() {
@@ -157,8 +153,8 @@ final class Jvm {
 
 	/**
 	 * Facts that need the classes: what each mixin class targets, and entry
-	 * points no descriptor names (Forge's {@code @Mod}, Burp extensions,
-	 * annotated servlets). Annotations and interfaces are read when jadx loads
+	 * points no descriptor names (Forge's {@code @Mod}, annotated servlets,
+	 * Spring Boot). Annotations are read when jadx loads
 	 * a class, so this decompiles nothing.
 	 */
 	static void code(Iterable<JavaNode> nodes, JsonObject o) {
@@ -185,13 +181,6 @@ final class Jvm {
 					collect(ann.getValues().get("value"), detail);
 					collect(ann.getValues().get("urlPatterns"), detail);
 					entries.add(entry(c, a.getValue(), detail));
-				}
-			}
-			for (ArgType t : c.getInterfaces()) {
-				String kind = t.isObject() ? ENTRY_INTERFACES.get(t.getObject()) : null;
-				if (kind != null) {
-					entries.add(entry(c, kind, new JsonArray()));
-					break; // Burp's legacy and Montoya interfaces often come together
 				}
 			}
 		}

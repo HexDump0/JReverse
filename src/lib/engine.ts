@@ -180,7 +180,7 @@ export interface Overview {
   mixinConfigs?: { file: string; package: string; classes: { cls: string; side: "both" | "client" | "server" }[] }[];
   /** Mixin class (Java name) to the classes it changes. */
   mixinTargets?: Record<string, string[]>;
-  entryClasses?: { cls: string; kind: "neoforge" | "forge" | "servlet" | "filter" | "listener" | "spring-boot" | "burp"; detail: string[] }[];
+  entryClasses?: { cls: string; kind: "neoforge" | "forge" | "servlet" | "filter" | "listener" | "spring-boot"; detail: string[] }[];
   services?: { service: string; providers: string[] }[];
   artifacts?: { group: string; artifact: string; version?: string }[];
   jars?: { path: string; size: number }[];
