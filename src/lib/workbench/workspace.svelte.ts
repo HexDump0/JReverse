@@ -19,6 +19,7 @@ import {
   type Opened,
   type Overview,
   type Project,
+  type StringValue,
   type Usage,
 } from "$lib/engine";
 import { say, setTask } from "$lib/status.svelte";
@@ -75,6 +76,18 @@ const empty = (): Project => ({ renames: {}, comments: {}, bookmarks: [] });
 
 export { dotted, simpleName } from "./ids";
 
+/** `text` in the member that starts at `from` (up to the next declaration), else anywhere after it. */
+function findAfter(doc: Doc, text: string, from: number): Pos | undefined {
+  const next = doc.declLines.find((d) => d.line > from)?.line ?? doc.lines.length;
+  for (const [a, b] of [[from, next], [next, doc.lines.length], [0, from]]) {
+    for (let l = a; l < b; l++) {
+      const col = doc.lines[l].indexOf(text);
+      if (col >= 0) return { line: l, col };
+    }
+  }
+  return undefined;
+}
+
 export class Workspace {
   readonly path: string;
   readonly name: string;
@@ -97,6 +110,8 @@ export class Workspace {
   /** Everything in the archive that isn't code; loaded when the Files panel first opens. */
   files = $state<FileEntry[] | null>(null);
   filesError = $state<string | null>(null);
+  /** Every string constant; loaded when the Strings panel first opens. */
+  strings = $state<StringValue[] | null>(null);
 
   private pending = new Map<string, Promise<Doc>>();
   private revealN = 0;
@@ -337,7 +352,7 @@ export class Workspace {
    */
   async openClass(
     cls: string,
-    o: { view?: View; node?: string; pos?: Pos; mark?: boolean; record?: boolean; activate?: boolean } = {},
+    o: { view?: View; node?: string; pos?: Pos; mark?: boolean; record?: boolean; activate?: boolean; find?: string } = {},
   ): Promise<void> {
     const top = this.byId.has(cls) ? cls : (this.classes.find((c) => cls.startsWith(c.id + "$"))?.id ?? cls);
     let tab = this.tabs.find((t) => t.kind === "class" && t.cls === top);
@@ -367,6 +382,7 @@ export class Workspace {
     let pos = o.pos;
     if (o.node) pos = this.declIn(doc, o.node) ?? pos;
     if (!pos && cls !== top) pos = this.declIn(doc, cls);
+    if (o.find) pos = findAfter(doc, o.find, pos?.line ?? 0) ?? pos;
     if (pos) this.place(tab, pos, o.mark);
   }
 

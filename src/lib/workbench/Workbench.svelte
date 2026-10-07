@@ -21,6 +21,8 @@
   import Inspector from "./Inspector.svelte";
   import OverviewPage from "./OverviewPage.svelte";
   import SearchPanel from "./SearchPanel.svelte";
+  import StringsPanel from "./StringsPanel.svelte";
+  import { javaEscape } from "./strings";
   import UsagesPanel from "./UsagesPanel.svelte";
   import { enclosing, linkAt, wordAt, type Link, type Pos, type View } from "./doc";
   import { copyAs, copyFormats, FORMAT_LABEL, isMod, type CopyFormat } from "./hooks";
@@ -40,7 +42,7 @@
     onreopen(deobfuscate);
   }
 
-  type Side = "classes" | "files" | "search" | "notes";
+  type Side = "classes" | "files" | "strings" | "search" | "notes";
   const PREFS = "jreverse.workbench";
   const IDENT = /^[A-Za-z_$][\w$]*$/;
 
@@ -299,6 +301,12 @@
   }
 
   /** Opens the search panel, filled with the selection or the word under the caret. */
+  async function searchString(value: string) {
+    side = "search";
+    await tick();
+    searchPanel?.focusSearch(value, "strings");
+  }
+
   export async function openSearch(prefill = true) {
     let text: string | undefined;
     if (prefill) {
@@ -388,6 +396,13 @@
     else ws.openClass(h.cls, { view: "java", pos: { line: h.line, col: h.col }, mark: true });
   }
 
+  /** Opens the member that uses a string constant, with the caret on the literal. */
+  function openString(id: string, value: string) {
+    const cls = ownerOf(id);
+    const top = ws.classes.find((c) => cls === c.id || cls.startsWith(c.id + "$"))?.id;
+    if (top) ws.openClass(top, { view: "java", node: id, find: `"${javaEscape(value)}"`, mark: true });
+  }
+
   function openNode(id: string) {
     const cls = ownerOf(id);
     const top = ws.classes.find((c) => cls === c.id || cls.startsWith(c.id + "$"))?.id;
@@ -474,6 +489,7 @@
         items: [
           { label: "Classes", run: focusClasses },
           { label: "Files", run: () => (side = "files") },
+          { label: "Strings", run: () => (side = "strings") },
           { label: "Notes", run: () => (side = "notes") },
           { label: "Search", key: "Ctrl Shift F", run: () => openSearch(false) },
           { label: prefs.inspector ? "Hide inspector" : "Show inspector", key: "Ctrl Alt I", run: toggleInspector },
@@ -612,7 +628,7 @@
 
 <svelte:window {onkeydown} {onmouseup} />
 
-{#snippet railButton(id: Side, icon: "listTree" | "files" | "search" | "bookmark", label: string, key: string)}
+{#snippet railButton(id: Side, icon: "listTree" | "files" | "quote" | "search" | "bookmark", label: string, key: string)}
   <button class:on={side === id} title="{label} ({key})" aria-label={label} onclick={() => (id === "search" ? openSearch(false) : id === "classes" ? focusClasses() : (side = id))}>
     <Icon name={icon} size={20} />
     {#if id === "notes" && noteCount}<span class="badge">{noteCount}</span>{/if}
@@ -623,6 +639,7 @@
   <nav class="rail" aria-label="Panels">
     {@render railButton("classes", "listTree", "Classes", "Ctrl Shift E")}
     {@render railButton("files", "files", "Files", "View menu")}
+    {@render railButton("strings", "quote", "Strings", "View menu")}
     {@render railButton("search", "search", "Search", "Ctrl Shift F")}
     {@render railButton("notes", "bookmark", "Notes", "View menu")}
   </nav>
@@ -674,6 +691,8 @@
       {/key}
     {:else if side === "files"}
       <FilesPanel {ws} current={tab.path} onopen={(p) => ws.openFile(p)} />
+    {:else if side === "strings"}
+      <StringsPanel {ws} onopen={openString} oncopy={copy} onsearch={searchString} />
     {:else if side === "search"}
       <SearchPanel bind:this={searchPanel} {ws} onopen={openHit} onclose={() => (side = "classes")} />
     {:else}

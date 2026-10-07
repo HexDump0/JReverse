@@ -32,10 +32,13 @@
   let error = $state("");
   let searched = $state("");
 
-  export async function focusSearch(text?: string) {
+  /** Focuses the box; with `only` set, searches string literals for `text` right away. */
+  export async function focusSearch(text?: string, only?: SearchScope) {
     if (text) query = text;
+    if (only) for (const sc of SCOPES) scopes[sc.id] = sc.id === only;
     await tick();
     input?.select();
+    if (only) run();
   }
 
   $effect(() => {

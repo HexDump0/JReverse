@@ -282,6 +282,17 @@ export function exportSources(session: string, dir: string, ticket?: string): Pr
   return invoke("export_sources", { session, dir, ticket });
 }
 
+/** A string constant and the methods and fields that use it (ids, at most 12). */
+export interface StringValue {
+  value: string;
+  uses: number;
+  at: string[];
+}
+
+export function listStrings(session: string, ticket?: string): Promise<{ strings: StringValue[]; ms: number }> {
+  return invoke("strings", { session, ticket });
+}
+
 export function cancelJob(ticket: string): Promise<void> {
   return invoke("cancel_job", { ticket });
 }
