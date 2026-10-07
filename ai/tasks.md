@@ -6,9 +6,7 @@ done and add a `log.md` entry.
 
 ## In progress
 
-- [claude-k2m, 2026-10-07] JVM-aware Overview (mod/plugin descriptors, services, bundled jars and
-  artifacts, web.xml), hooks per file type in the Inspector, a Strings panel. Engine `Overview.java`,
-  `OverviewPage.svelte`, `Inspector.svelte`, `hooks.ts`, new strings method.
+- [claude-k2m, 2026-10-07] Paused: mapping import/export, `Mappings.java` + mapping-io dependency, uncommitted.
 
 ## Next (owner's plan for the next session)
 

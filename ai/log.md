@@ -9,6 +9,18 @@ What was done. What's left. Anything the next agent must know.
 
 ---
 
+## 2026-10-07 — claude-k2m — JVM-aware overview, copy formats, strings panel
+- Owner's direction (decisions.md): a tool for understanding compiled Java, for everyone, reading only.
+- Overview reads mod/plugin descriptors (Fabric, Quilt, NeoForge/Forge, Bukkit/Paper, Bungee, Velocity),
+  mixins and their targets, services, bundled jars and Maven artifacts, web.xml, Burp/servlet/@Mod entry classes.
+- Inspector "Copy as": Frida/Xposed/Smali for Android, Reference/Descriptor (+ Mixin for mods) for JVM; collapsed.
+- Strings panel: every string constant from bytecode (no decompile, ~0.2 s on 7k classes), grouped by shape,
+  library strings hidden, Kotlin null-check names dropped, click opens the literal.
+- jadx INFO comments off; obfuscated top-level packages grouped in the tree.
+- Uncommitted, half done: mapping import/export (`engine/.../backend/Mappings.java`, mapping-io in
+  build.gradle.kts). No method, Rust command or UI yet. Paused by the owner.
+- A 314 MB APK runs out of heap on open (no -Xmx yet).
+
 ## 2026-10-06 — claude-l7x — v5 redesign built into the app
 - Owner approved `design/workbench-v5.html` ("I like it very much, let's finalize it"). Built it on
   branch `ui-redesign` (not committed): `app.css` tokens for three themes + `theme.svelte.ts` (View
