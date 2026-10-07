@@ -13,12 +13,15 @@ export interface Pkg<T extends { id: string } = ClassEntry> {
   total: number;
   /** The group holding every known library, see `buildClassTree`. */
   lib?: boolean;
+  /** A group made by `buildClassTree` (Libraries, Obfuscated), not a real package. */
+  group?: boolean;
   /** Most of the classes right in it have obfuscated names. */
   obf?: boolean;
 }
 
 /** The path of the Libraries group; no real package can have it. */
 export const LIBRARIES = "\u0000libraries";
+export const OBFUSCATED = "\u0000obfuscated";
 
 export type Row<T extends { id: string } = ClassEntry> =
   | { type: "pkg"; key: string; depth: number; pkg: Pkg<T>; open: boolean }
@@ -61,23 +64,40 @@ export function buildTree<T extends { id: string }>(classes: T[], join = "."): P
 }
 
 /**
- * The class tree: the app's own packages first, then every known library under
- * one Libraries group, so your code isn't buried under androidx and kotlin.
+ * The class tree: the app's own packages first, then the obfuscated top-level
+ * packages (`a`, `b0`, ...) in one group and every known library in another, so
+ * named code isn't buried under androidx and fifty one-letter packages.
  * A file that is all library (a library's own JAR) isn't grouped.
  */
 export function buildClassTree<T extends { id: string }>(classes: T[], isLibrary: (id: string) => boolean, isObfuscated: (id: string) => boolean): Pkg<T> {
   const app = classes.filter((c) => !isLibrary(c.id));
   const libs = app.length ? classes.filter((c) => isLibrary(c.id)) : [];
   const root = buildTree(libs.length ? app : classes);
+  const shortObf = (p: Pkg<T>) => {
+    if (p.path.split("/")[0].length > 2) return false;
+    const all: T[] = [];
+    const walk = (q: Pkg<T>) => (all.push(...q.classes), q.pkgs.forEach(walk));
+    walk(p);
+    return all.filter((c) => isObfuscated(c.id)).length / Math.max(1, all.length) >= 0.6;
+  };
+  const obfPkgs = root.pkgs.filter(shortObf);
+  const obfClasses = root.classes.filter((c) => isObfuscated(c.id));
+  if (obfPkgs.length + obfClasses.length >= 3 && obfPkgs.length + obfClasses.length < root.pkgs.length + root.classes.length) {
+    root.pkgs = root.pkgs.filter((p) => !obfPkgs.includes(p));
+    root.classes = root.classes.filter((c) => !obfClasses.includes(c));
+    const total = obfPkgs.reduce((n, p) => n + p.total, obfClasses.length);
+    root.pkgs.push({ label: "Obfuscated", path: OBFUSCATED, pkgs: obfPkgs, classes: obfClasses, total, group: true });
+  }
   if (libs.length) {
     const lib = buildTree(libs);
-    root.pkgs.push({ label: "Libraries", path: LIBRARIES, pkgs: lib.pkgs, classes: lib.classes, total: lib.total, lib: true });
+    root.pkgs.push({ label: "Libraries", path: LIBRARIES, pkgs: lib.pkgs, classes: lib.classes, total: lib.total, lib: true, group: true });
     root.total += lib.total;
   }
   const mark = (p: Pkg<T>) => {
     const obf = p.classes.filter((c) => isObfuscated(c.id)).length;
-    if (p.classes.length >= 3 && obf / p.classes.length >= 0.6) p.obf = true;
-    p.pkgs.forEach(mark);
+    // Inside the Obfuscated group every package is, so saying so on each row is noise.
+    if (!p.group && p.path !== OBFUSCATED && p.classes.length >= 3 && obf / p.classes.length >= 0.6) p.obf = true;
+    if (p.path !== OBFUSCATED) p.pkgs.forEach(mark);
   };
   root.pkgs.forEach(mark);
   return root;
@@ -104,12 +124,9 @@ export function pathsTo<T extends { id: string }>(root: Pkg<T>, classId: string)
   const holds = (s: Pkg<T>) => pkg === s.path || pkg.startsWith(s.path + "/");
   let p = root;
   for (;;) {
-    let next = p.pkgs.find((s) => !s.lib && holds(s));
-    if (!next) {
-      // Into the Libraries group, if the class is in there.
-      const lib = p.pkgs.find((s) => s.lib);
-      if (lib && (lib.pkgs.some(holds) || lib.classes.some((c) => c.id === classId))) next = lib;
-    }
+    let next = p.pkgs.find((s) => !s.group && holds(s));
+    // Into the Libraries or Obfuscated group, if the class is in there.
+    next ??= p.pkgs.find((g) => g.group && (g.pkgs.some(holds) || g.classes.some((c) => c.id === classId)));
     if (!next) break;
     out.push(next.path);
     p = next;

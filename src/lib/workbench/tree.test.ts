@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildClassTree, buildTree, LIBRARIES, pathsTo, visibleRows } from "./tree";
+import { buildClassTree, buildTree, LIBRARIES, OBFUSCATED, pathsTo, visibleRows } from "./tree";
 
 const cls = (id: string) => ({ id, kind: "class" as const });
 
@@ -40,5 +40,17 @@ describe("tree", () => {
     expect(pathsTo(t, "okhttp3/Call")).toEqual([LIBRARIES, "okhttp3"]);
     // All library: nothing to put first, so no group.
     expect(buildClassTree([cls("okhttp3/Call")], lib, () => false).pkgs.map((p) => p.label)).toEqual(["okhttp3"]);
+  });
+
+  it("groups obfuscated top-level packages, but not short real ones", () => {
+    const obf = (id: string) => /(^|\/)[a-zA-Z]{1,2}\d?$/.test(id) || id.split("/").slice(0, -1).every((p) => p.length <= 2);
+    const t = buildClassTree(
+      [cls("a/a"), cls("b/c"), cls("b0/d"), cls("c"), cls("com/app/Main"), cls("io/github/x/Tool"), cls("io/github/x/Other")],
+      () => false,
+      obf,
+    );
+    expect(t.pkgs.map((p) => p.label)).toEqual(["com.app", "io.github.x", "Obfuscated"]);
+    expect(t.pkgs[2].total).toBe(4);
+    expect(pathsTo(t, "b0/d")).toEqual([OBFUSCATED, "b0"]);
   });
 });

@@ -63,7 +63,7 @@
     if (own > 80) return;
     const walk = (p: Pkg) =>
       p.pkgs.forEach((sub) => {
-        if (sub.lib) return;
+        if (sub.group) return;
         open.add(sub.path);
         walk(sub);
       });
@@ -237,7 +237,7 @@
         <div
           class="row pkg"
           class:cursor={i === cursor}
-          class:lib={r.pkg.lib}
+          class:lib={r.pkg.group}
           style:top="{i * ROW}px"
           style:padding-left="{pad(r.depth)}px"
           role="treeitem"
