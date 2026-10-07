@@ -6,7 +6,9 @@ done and add a `log.md` entry.
 
 ## In progress
 
-_(none)_
+- [claude-k2m, 2026-10-07] JVM-aware Overview (mod/plugin descriptors, services, bundled jars and
+  artifacts, web.xml), hooks per file type in the Inspector, a Strings panel. Engine `Overview.java`,
+  `OverviewPage.svelte`, `Inspector.svelte`, `hooks.ts`, new strings method.
 
 ## Next (owner's plan for the next session)
 
@@ -25,6 +27,12 @@ _(none)_
 ## Backlog
 
 Not prioritised by the owner yet. Ask before starting anything big.
+
+- Gaps found comparing with jadx-gui, Recaf 4, Bytecode Viewer, JEB (2026-10-07; the owner ruled out patching on 2026-10-07):
+  mapping import/export (ProGuard `mapping.txt`, Tiny/Enigma/SRG), a Strings view, a JVM-aware Overview
+  (services, agents, `pom.properties`, plugin/mod descriptors, `web.xml`), JVM hook snippets (Mixin target,
+  agent), split APK bundles (XAPK/APKS/APKM), version diff of two files, class hierarchy / call graph,
+  patching (edit smali or bytecode, rebuild, sign), plugin or scripting API, an MCP server for LLM clients.
 
 - Engine progress for `open` ("38 of 146"): jadx's `load()` has no progress hook, so this needs
   a look at its internals or a pass of our own.

@@ -3,6 +3,13 @@
 Why things are the way they are. Newest first. Add an entry when you make a
 choice someone might later question.
 
+### What JReverse is: a tool for understanding compiled Java (owner, 2026-10-07)
+For everyone who reads JVM or Android code (mods, plugins, server apps, libraries, APKs), not
+an Android tool with JAR support. Reading only: no patching or bytecode editing, no debugger.
+The screens adapt to what was opened (a Fabric mod, a WAR, a plain JAR, an APK). The owner
+rejected a "is this safe / what does it do" headline as slop: show facts people use (descriptors,
+entry points, strings, bundled libraries), not verdicts or detection scores.
+
 ### Links come from jadx's code metadata, sent as flat spans (2026-10-03)
 `decompile` returns every identifier that names a class/method/field as `[line, col, len, node]`
 quadruples plus a node table, so the UI can link, highlight occurrences and index declarations
