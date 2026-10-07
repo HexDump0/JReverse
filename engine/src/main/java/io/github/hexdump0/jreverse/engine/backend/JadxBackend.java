@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import jadx.api.CommentsLevel;
 import jadx.api.ICodeInfo;
 import jadx.api.JadxArgs;
 import jadx.api.JadxDecompiler;
@@ -78,6 +79,9 @@ public final class JadxBackend implements Backend {
 		// jadx would otherwise read or write a .jobf mapping file next to the user's file.
 		args.setGeneratedRenamesMappingFileMode(GeneratedRenamesMappingFileMode.IGNORE);
 		args.setShowInconsistentCode(true); // partial output beats none
+		// jadx's INFO comments ("loaded from: x.jar", "renamed from: a") are its bookkeeping, not the
+		// program; warnings and errors stay, since they say where the output can't be trusted.
+		args.setCommentsLevel(CommentsLevel.WARN);
 		args.setCodeData(new JadxCodeData());
 
 		JadxDecompiler jadx = new JadxDecompiler(args);
