@@ -62,6 +62,8 @@ public final class Server {
 				Map.entry("usages", methods::usages),
 				Map.entry("search", methods::search),
 				Map.entry("strings", methods::strings),
+				Map.entry("readMappings", methods::readMappings),
+				Map.entry("writeMappings", methods::writeMappings),
 				Map.entry("export", methods::export),
 				Map.entry("cancel", methods::cancel),
 				Map.entry("overview", methods::overview),

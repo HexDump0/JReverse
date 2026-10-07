@@ -169,6 +169,34 @@ class AnalysisTest {
 	}
 
 	@Test
+	void mappingsRoundTrip() throws Exception {
+		JsonObject renames = new JsonObject();
+		renames.addProperty("fixture/Greeter", "Welcomer");
+		renames.addProperty(GREET, "salute");
+		JsonObject comments = new JsonObject();
+		comments.addProperty(GREET, "Says hello three times");
+		for (String format : new String[] {"tiny2", "proguard", "enigma", "tsrg2"}) {
+			Path file = tmp.resolve("map-" + format + ".txt");
+			JsonObject w = result(engine.call("writeMappings", "session", jar, "path", file.toString(), "format", format, "renames",
+					renames, "comments", comments));
+			assertEquals(2, w.get("written").getAsInt(), format);
+			JsonObject r = result(engine.call("readMappings", "session", jar, "path", file.toString()));
+			assertEquals(renames, r.getAsJsonObject("renames"), format + ": " + Files.readString(file));
+			if (!format.equals("proguard") && !format.equals("tsrg2")) {
+				assertEquals(comments, r.getAsJsonObject("comments"), format);
+			}
+		}
+		// R8's own output: readable names on the left, what's in the file on the right.
+		Path r8 = tmp.resolve("mapping.txt");
+		Files.writeString(r8, """
+				com.example.Welcomer -> fixture.Greeter:
+				    java.lang.String salute(java.lang.String) -> greet
+				""");
+		JsonObject r = result(engine.call("readMappings", "session", jar, "path", r8.toString()));
+		assertEquals(renames, r.getAsJsonObject("renames"));
+	}
+
+	@Test
 	void overviewOfAJar() throws Exception {
 		JsonObject o = result(engine.call("overview", "session", jar));
 		assertEquals("jar", o.get("kind").getAsString());

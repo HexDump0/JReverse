@@ -32,6 +32,7 @@ dependencies {
     implementation("io.github.skylot:jadx-java-input:$jadxVersion")
     implementation("org.vineflower:vineflower:$vineflowerVersion")
     implementation("com.google.code.gson:gson:2.14.0")
+    implementation("net.fabricmc:mapping-io:0.9.1")
     runtimeOnly("org.slf4j:slf4j-simple:2.0.18")
     compileOnly("org.jetbrains:annotations:26.1.0") // jadx's API uses them
 

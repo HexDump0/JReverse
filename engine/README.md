@@ -51,6 +51,8 @@ apply to jadx only. Both share jadx's class ids.
 | `usages` | `session`, `node` | `usages: [{cls, line, col, len, text, in?}]`, `ms` |
 | `search` | `session`, `query`, `regex`?, `caseSensitive`?, `scopes`?, `limit`? (1000), `ticket`? | `hits`, `truncated`, `searched`, `ms` |
 | `strings` | `session`, `ticket`? | `strings: [{value, uses, at}]`, `ms`: every string constant in the code (and constant field values), `at` naming up to 12 of the methods and fields that use it. Read from the bytecode, nothing is decompiled; collected once per session, with `progress` for a ticket |
+| `readMappings` | `session`, `path` | `{format, renames, comments, matched, mappings}`: a mapping file (anything mapping-io reads: ProGuard, Tiny, Enigma, SRG, ...) matched to this file's ids. The side whose class names match the file is used, so R8's `mapping.txt` and Fabric's Tiny both work. Classes get simple names |
+| `writeMappings` | `session`, `path`, `format` (`proguard` `tiny2` `enigma` `tsrg2`), `renames`, `comments`? | `{written}`: renames (and comments, where the format has them) as a mapping file; ProGuard with readable names on the left, as R8 writes it |
 | `export` | `session`, `dir`, `ticket`? | `dir`, `written`, `failed`, `ms` |
 | `cancel` | `ticket` | `cancelled`: whether a job with that ticket was running |
 | `overview` | `session` | see below |

@@ -21,6 +21,7 @@ import io.github.hexdump0.jreverse.engine.backend.Backend;
 import io.github.hexdump0.jreverse.engine.backend.ClassEntry;
 import io.github.hexdump0.jreverse.engine.backend.Decompiled;
 import io.github.hexdump0.jreverse.engine.backend.JadxBackend;
+import io.github.hexdump0.jreverse.engine.backend.Mappings;
 import io.github.hexdump0.jreverse.engine.backend.NodeInfo;
 import io.github.hexdump0.jreverse.engine.backend.Progress;
 import io.github.hexdump0.jreverse.engine.backend.Search;
@@ -210,6 +211,39 @@ final class Methods {
 			return result;
 		} finally {
 			finish(ticket);
+		}
+	}
+
+	JsonElement readMappings(JsonObject params) throws RpcException {
+		JadxBackend jadx = sessions.get(string(params, "session")).jadx();
+		Mappings.Read r = Mappings.read(jadx, path(params));
+		JsonObject result = new JsonObject();
+		result.addProperty("format", r.format());
+		JsonObject renames = new JsonObject();
+		r.renames().forEach(renames::addProperty);
+		result.add("renames", renames);
+		JsonObject comments = new JsonObject();
+		r.comments().forEach(comments::addProperty);
+		result.add("comments", comments);
+		result.addProperty("matched", r.matched());
+		result.addProperty("mappings", r.mappings());
+		return result;
+	}
+
+	JsonElement writeMappings(JsonObject params) throws RpcException {
+		JadxBackend jadx = sessions.get(string(params, "session")).jadx();
+		int written = Mappings.write(jadx, path(params), string(params, "format"), stringMap(params, "renames"),
+				stringMap(params, "comments"));
+		JsonObject result = new JsonObject();
+		result.addProperty("written", written);
+		return result;
+	}
+
+	private static Path path(JsonObject params) throws RpcException {
+		try {
+			return Path.of(string(params, "path")).toAbsolutePath().normalize();
+		} catch (InvalidPathException e) {
+			throw new RpcException(ErrorCode.BAD_REQUEST, "invalid path: " + params.get("path"));
 		}
 	}
 
