@@ -17,8 +17,9 @@ What was done. What's left. Anything the next agent must know.
 - Strings panel: every string constant from bytecode (no decompile, ~0.2 s on 7k classes), grouped by shape,
   library strings hidden, Kotlin null-check names dropped, click opens the literal.
 - jadx INFO comments off; obfuscated top-level packages grouped in the tree.
-- Uncommitted, half done: mapping import/export (`engine/.../backend/Mappings.java`, mapping-io in
-  build.gradle.kts). No method, Rust command or UI yet. Paused by the owner.
+- Mappings (File menu): import anything mapping-io reads (R8 mapping.txt, Tiny, Enigma, SRG); names and
+  comments fill in, your own win. Export ProGuard/Tiny v2/Enigma/TSRG v2. Classes get simple names only
+  (no package moves yet). Yarn/Mojang names for *external* classes (net.minecraft.class_1308) aren't applied.
 - A 314 MB APK runs out of heap on open (no -Xmx yet).
 
 ## 2026-10-06 — claude-l7x — v5 redesign built into the app

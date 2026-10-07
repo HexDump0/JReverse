@@ -6,7 +6,6 @@ done and add a `log.md` entry.
 
 ## In progress
 
-- [claude-k2m, 2026-10-07] Paused: mapping import/export, `Mappings.java` + mapping-io dependency, uncommitted.
 
 ## Next (owner's plan for the next session)
 
@@ -27,15 +26,15 @@ done and add a `log.md` entry.
 Not prioritised by the owner yet. Ask before starting anything big.
 
 - Gaps found comparing with jadx-gui, Recaf 4, Bytecode Viewer, JEB (2026-10-07; the owner ruled out patching on 2026-10-07):
-  mapping import/export (ProGuard `mapping.txt`, Tiny/Enigma/SRG), a Strings view, a JVM-aware Overview
-  (services, agents, `pom.properties`, plugin/mod descriptors, `web.xml`), JVM hook snippets (Mixin target,
-  agent), split APK bundles (XAPK/APKS/APKM), version diff of two files, class hierarchy / call graph,
+  split APK bundles (XAPK/APKS/APKM), version diff of two files, class hierarchy / call graph,
   patching (edit smali or bytecode, rebuild, sign), plugin or scripting API, an MCP server for LLM clients.
 
+- Mappings for classes outside the file (Yarn/Mojang names for `net.minecraft.class_1308` in a mod), and
+  imported class names that move packages.
 - Engine progress for `open` ("38 of 146"): jadx's `load()` has no progress hook, so this needs
   a look at its internals or a pass of our own.
 - AAB: decode the protobuf manifest so the Overview has its Android section
 - Vineflower for DEX input (dex2jar step), then CFR / Procyon
 - Release basics (after the home screen, owner's order on 2026-10-05): LICENSE + third-party
   NOTICE (jadx, Vineflower, the JRE), `tauri build` on Windows/macOS (CI matrix), signing,
-  updater, a heap limit for the engine JVM (and a test on a 40k-class APK), a settings page
+  updater, a heap limit for the engine JVM (a 314 MB APK hits OutOfMemoryError on open, 2026-10-07), a settings page
