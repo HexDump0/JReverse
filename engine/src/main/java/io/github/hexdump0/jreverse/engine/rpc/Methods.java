@@ -24,6 +24,7 @@ import io.github.hexdump0.jreverse.engine.backend.JadxBackend;
 import io.github.hexdump0.jreverse.engine.backend.NodeInfo;
 import io.github.hexdump0.jreverse.engine.backend.Progress;
 import io.github.hexdump0.jreverse.engine.backend.Search;
+import io.github.hexdump0.jreverse.engine.backend.Strings;
 import io.github.hexdump0.jreverse.engine.session.Export;
 import io.github.hexdump0.jreverse.engine.session.Session;
 import io.github.hexdump0.jreverse.engine.session.Sessions;
@@ -181,6 +182,31 @@ final class Methods {
 			result.addProperty("truncated", r.truncated());
 			result.addProperty("searched", r.searched());
 			result.addProperty("ms", r.ms());
+			return result;
+		} finally {
+			finish(ticket);
+		}
+	}
+
+	JsonElement strings(JsonObject params) throws RpcException {
+		Session session = sessions.get(string(params, "session"));
+		String ticket = optString(params, "ticket");
+		AtomicBoolean cancelled = start(ticket);
+		long start = System.nanoTime();
+		try {
+			JsonArray list = new JsonArray();
+			for (Strings.Value v : session.strings(progress(ticket), cancelled::get)) {
+				JsonObject o = new JsonObject();
+				o.addProperty("value", v.value());
+				o.addProperty("uses", v.uses());
+				JsonArray at = new JsonArray();
+				v.at().forEach(at::add);
+				o.add("at", at);
+				list.add(o);
+			}
+			JsonObject result = new JsonObject();
+			result.add("strings", list);
+			result.addProperty("ms", millisSince(start));
 			return result;
 		} finally {
 			finish(ticket);

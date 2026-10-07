@@ -50,6 +50,7 @@ apply to jadx only. Both share jadx's class ids.
 | `node` | `session`, `node` | a node (below) |
 | `usages` | `session`, `node` | `usages: [{cls, line, col, len, text, in?}]`, `ms` |
 | `search` | `session`, `query`, `regex`?, `caseSensitive`?, `scopes`?, `limit`? (1000), `ticket`? | `hits`, `truncated`, `searched`, `ms` |
+| `strings` | `session`, `ticket`? | `strings: [{value, uses, at}]`, `ms`: every string constant in the code (and constant field values), `at` naming up to 12 of the methods and fields that use it. Read from the bytecode, nothing is decompiled; collected once per session, with `progress` for a ticket |
 | `export` | `session`, `dir`, `ticket`? | `dir`, `written`, `failed`, `ms` |
 | `cancel` | `ticket` | `cancelled`: whether a job with that ticket was running |
 | `overview` | `session` | see below |

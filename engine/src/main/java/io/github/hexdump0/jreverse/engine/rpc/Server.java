@@ -61,6 +61,7 @@ public final class Server {
 				Map.entry("node", methods::node),
 				Map.entry("usages", methods::usages),
 				Map.entry("search", methods::search),
+				Map.entry("strings", methods::strings),
 				Map.entry("export", methods::export),
 				Map.entry("cancel", methods::cancel),
 				Map.entry("overview", methods::overview),

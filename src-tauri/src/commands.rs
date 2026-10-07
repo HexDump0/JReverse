@@ -79,6 +79,11 @@ pub async fn export_sources(engine: State<'_, Engine>, session: String, dir: Pat
 }
 
 #[tauri::command]
+pub async fn strings(engine: State<'_, Engine>, session: String, ticket: Option<String>) -> Result<Value, EngineError> {
+    engine.call(&session, "strings", params(json!({ "ticket": ticket }))).await
+}
+
+#[tauri::command]
 pub async fn cancel_job(engine: State<'_, Engine>, ticket: String) -> Result<(), EngineError> {
     engine.cancel(&ticket).await
 }

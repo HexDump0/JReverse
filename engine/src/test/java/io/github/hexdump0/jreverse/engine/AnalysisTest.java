@@ -147,6 +147,28 @@ class AnalysisTest {
 	}
 
 	@Test
+	void stringsFromClassFilesAndDex() throws Exception {
+		JsonObject jarStrings = result(engine.call("strings", "session", jar));
+		JsonObject comma = find(jarStrings.getAsJsonArray("strings"), ", ");
+		assertEquals(1, comma.get("uses").getAsInt());
+		assertEquals(GREET, comma.getAsJsonArray("at").get(0).getAsString());
+
+		Path dex = Fixtures.dex(Files.createDirectories(tmp.resolve("strings-dex")));
+		String s = result(engine.call("open", "path", dex.toString())).get("session").getAsString();
+		JsonObject hello = find(result(engine.call("strings", "session", s)).getAsJsonArray("strings"), "Hello, ");
+		assertTrue(hello.getAsJsonArray("at").get(0).getAsString().startsWith("smalifix/Hello."), hello.toString());
+	}
+
+	private static JsonObject find(JsonArray strings, String value) {
+		for (var e : strings) {
+			if (e.getAsJsonObject().get("value").getAsString().equals(value)) {
+				return e.getAsJsonObject();
+			}
+		}
+		throw new AssertionError("no string " + value + " in " + strings);
+	}
+
+	@Test
 	void overviewOfAJar() throws Exception {
 		JsonObject o = result(engine.call("overview", "session", jar));
 		assertEquals("jar", o.get("kind").getAsString());

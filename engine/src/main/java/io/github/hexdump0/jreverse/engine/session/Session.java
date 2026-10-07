@@ -4,12 +4,15 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 import com.google.gson.JsonObject;
 
 import io.github.hexdump0.jreverse.engine.backend.Backend;
 import io.github.hexdump0.jreverse.engine.backend.ClassEntry;
 import io.github.hexdump0.jreverse.engine.backend.JadxBackend;
+import io.github.hexdump0.jreverse.engine.backend.Progress;
+import io.github.hexdump0.jreverse.engine.backend.Strings;
 import io.github.hexdump0.jreverse.engine.backend.VineflowerBackend;
 import io.github.hexdump0.jreverse.engine.rpc.ErrorCode;
 import io.github.hexdump0.jreverse.engine.rpc.RpcException;
@@ -25,6 +28,7 @@ public final class Session implements AutoCloseable {
 	private final Map<String, Backend> others = new HashMap<>();
 	private final boolean deobfuscated;
 	private JsonObject overview;
+	private List<Strings.Value> strings;
 
 	Session(String id, Path path, InputKind kind, JadxBackend primary, boolean deobfuscated) {
 		this.id = id;
@@ -66,6 +70,14 @@ public final class Session implements AutoCloseable {
 			overview = Overview.build(this);
 		}
 		return overview;
+	}
+
+	/** Every string constant, collected on first request; a cancelled run isn't kept. */
+	public synchronized List<Strings.Value> strings(Progress progress, BooleanSupplier cancelled) throws RpcException {
+		if (strings == null) {
+			strings = Strings.collect(primary, progress, cancelled);
+		}
+		return strings;
 	}
 
 	/** The decompilers that can read this input; jadx first. Vineflower reads JVM class files only. */

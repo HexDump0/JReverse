@@ -52,6 +52,7 @@ pub fn run() {
             commands::find_usages,
             commands::search,
             commands::export_sources,
+            commands::strings,
             commands::cancel_job,
             commands::overview,
             commands::set_code_data,
