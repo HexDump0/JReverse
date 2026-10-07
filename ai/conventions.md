@@ -19,7 +19,8 @@ The owner wants commits to look human-written:
 - Rust: 4 spaces, `thiserror` errors, async with tokio. Every error that
   reaches the frontend is `{code, message}`.
 - Svelte 5 runes (`$state`, `$derived`, `$props`). Theme colours are CSS custom
-  properties in `src/app.css`, with values taken from `design/DESIGN.md`.
+  properties in `src/app.css`, one block per theme (Graphite, Indigo, Paper). Never hardcode a
+  colour in a component; only the brand mark keeps its fixed `#cdd7fa` / `#6f82cf` shades.
 - Comments are sparse and explain *why*. Match the surrounding code.
 
 ## UI taste (owner feedback, 2026-10-01)
@@ -45,7 +46,9 @@ Gradients: keep them rare. The beam and the selection ray fade out because that 
 effect itself. Use flat colours for everything else (no radial glows on selected items).
 Motion: none. The owner rejected a subtle GSAP pass (intro, light pulses, gliding ray) and wants no
 animation. Only functional progress indicators (spinner, loading progress) move.
-`design/start-mockup.html` is the approved direction for the start screen (2026-10-01).
+`design/start-mockup.html` was approved for the start screen on 2026-10-01. On 2026-10-05 the owner
+said the built home screen "doesn't look good at all", so it is no longer the target. Keep the
+rules above. Treat the layout itself as open.
 First run (2026-10-01): four rounds. Rejected: a landing page (tagline + paragraph + step cards), info written
 as a `Welcome.java` code view (gimmick), and a plain conventional column ("too simple", wasted space, wordy).
 Then mockups (`design/welcome-options.html`), a two-step intro with a feature list, and a live example
@@ -53,12 +56,16 @@ preview: all dropped. Final call (owner's spec): a one-screen onboarding on firs
 one button), then the normal main menu with the bundled example as a default entry. General wording, no
 feature lists, no text that isn't needed. Don't scan the user's disk.
 
-## Workbench UI (2026-10-03)
+## Workbench UI (2026-10-06, the approved v5)
 
-Built in the start screen's language: flat colours, one accent for "where you are" (selection,
-caret, focus), no stripes, no motion except spinners and progress bars, Tabler icons only, labels
-on everything, no filler copy. Syntax colours are tokens in `app.css` (`--c-*`) and never use the
-accent. Single-letter kind glyphs (C, I, E, @, R; m, f) are coloured text, not badges.
+- Surfaces in three clear steps: `--frame` (outer), `--panel` (side panel, inspector), `--editor`.
+  Each area is an `.island` (rounded, 1px `--edge`) on the frame. Every panel header is `.ph`.
+- Text: `--text-hi` for content, `--text` default, `--text-3` only for small details. No 11px grey text.
+- Code: punctuation dimmed (`.tp`), names bright (`.tv`), constants `.tf`. Your additions (comments,
+  renames, bookmarks) use `--ink`; the accent stays "where you are"; syntax never uses either.
+- Kind badges: classes in a rounded square, members in a circle (`.k .k-c`, `.k-m`, ...).
+- Fonts: Geist (UI), JetBrains Mono (code). No serif: the owner rejected a serif italic for notes.
+- Still: no stripes, no motion except spinners and progress, Tabler icons only, no filler copy.
 
 ## Commands
 

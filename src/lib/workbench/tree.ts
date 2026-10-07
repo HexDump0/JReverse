@@ -11,7 +11,14 @@ export interface Pkg<T extends { id: string } = ClassEntry> {
   classes: T[];
   /** Classes in this package and below. */
   total: number;
+  /** The group holding every known library, see `buildClassTree`. */
+  lib?: boolean;
+  /** Most of the classes right in it have obfuscated names. */
+  obf?: boolean;
 }
+
+/** The path of the Libraries group; no real package can have it. */
+export const LIBRARIES = "\u0000libraries";
 
 export type Row<T extends { id: string } = ClassEntry> =
   | { type: "pkg"; key: string; depth: number; pkg: Pkg<T>; open: boolean }
@@ -53,6 +60,29 @@ export function buildTree<T extends { id: string }>(classes: T[], join = "."): P
   return root;
 }
 
+/**
+ * The class tree: the app's own packages first, then every known library under
+ * one Libraries group, so your code isn't buried under androidx and kotlin.
+ * A file that is all library (a library's own JAR) isn't grouped.
+ */
+export function buildClassTree<T extends { id: string }>(classes: T[], isLibrary: (id: string) => boolean, isObfuscated: (id: string) => boolean): Pkg<T> {
+  const app = classes.filter((c) => !isLibrary(c.id));
+  const libs = app.length ? classes.filter((c) => isLibrary(c.id)) : [];
+  const root = buildTree(libs.length ? app : classes);
+  if (libs.length) {
+    const lib = buildTree(libs);
+    root.pkgs.push({ label: "Libraries", path: LIBRARIES, pkgs: lib.pkgs, classes: lib.classes, total: lib.total, lib: true });
+    root.total += lib.total;
+  }
+  const mark = (p: Pkg<T>) => {
+    const obf = p.classes.filter((c) => isObfuscated(c.id)).length;
+    if (p.classes.length >= 3 && obf / p.classes.length >= 0.6) p.obf = true;
+    p.pkgs.forEach(mark);
+  };
+  root.pkgs.forEach(mark);
+  return root;
+}
+
 export function visibleRows<T extends { id: string }>(root: Pkg<T>, open: Set<string>): Row<T>[] {
   const rows: Row<T>[] = [];
   const walk = (p: Pkg<T>, depth: number) => {
@@ -71,9 +101,15 @@ export function visibleRows<T extends { id: string }>(root: Pkg<T>, open: Set<st
 export function pathsTo<T extends { id: string }>(root: Pkg<T>, classId: string): string[] {
   const out: string[] = [];
   const pkg = classId.includes("/") ? classId.slice(0, classId.lastIndexOf("/")) : "";
+  const holds = (s: Pkg<T>) => pkg === s.path || pkg.startsWith(s.path + "/");
   let p = root;
   for (;;) {
-    const next = p.pkgs.find((s) => pkg === s.path || pkg.startsWith(s.path + "/"));
+    let next = p.pkgs.find((s) => !s.lib && holds(s));
+    if (!next) {
+      // Into the Libraries group, if the class is in there.
+      const lib = p.pkgs.find((s) => s.lib);
+      if (lib && (lib.pkgs.some(holds) || lib.classes.some((c) => c.id === classId))) next = lib;
+    }
     if (!next) break;
     out.push(next.path);
     p = next;

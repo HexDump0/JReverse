@@ -1,13 +1,26 @@
 <script lang="ts" module>
   import type { ClassKind } from "$lib/engine";
 
-  /** One letter per class kind, as in most Java IDEs; coloured per kind in CSS. */
+  /** One letter per class kind, as in most Java IDEs; coloured per kind in app.css. */
   export const KIND_LETTER: Record<ClassKind, string> = { class: "C", interface: "I", enum: "E", annotation: "@", record: "R" };
+  export const KIND_CLASS: Record<ClassKind, string> = { class: "k-c", interface: "k-i", enum: "k-e", annotation: "k-a", record: "k-r" };
+
+  /** A member of the class in the active tab, listed under it. */
+  export interface Member {
+    id: string;
+    kind: "method" | "field" | "class";
+    name: string;
+    /** Method parameters, `(int, String)`. */
+    params: string;
+    line: number;
+    col: number;
+  }
 </script>
 
 <script lang="ts">
-  // Packages and classes. Only visible rows are rendered, so a 10,000-class APK
-  // scrolls fine. With a filter the tree turns into a flat list of matches.
+  // Packages and classes, and the members of the open class under it. Only
+  // visible rows are rendered, so a 10,000-class APK scrolls fine. With a
+  // filter the tree turns into a flat list of matches.
   import { tick, untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import type { ClassEntry } from "$lib/engine";
@@ -21,26 +34,36 @@
     filter: string;
     /** The class in the active tab. */
     current: string | undefined;
+    members?: Member[];
+    /** The member the caret is in. */
+    memberAt?: string;
     onopen: (cls: string) => void;
+    onmember: (m: Member) => void;
     oncontext: (e: MouseEvent, cls: string) => void;
   }
 
-  let { ws, filter, current, onopen, oncontext }: Props = $props();
+  let { ws, filter, current, members = [], memberAt, onopen, onmember, oncontext }: Props = $props();
 
-  const ROW = 24;
+  type TreeRow = Row | { type: "mem"; key: string; depth: number; mem: Member };
+
+  const ROW = 28;
+  const STEP = 18;
   const OVERSCAN = 20;
 
   let list: HTMLDivElement;
   let top = $state(0);
   let height = $state(400);
   let cursor = $state(0);
+  let membersShut = $state(false);
   const open = new SvelteSet<string>();
 
-  // A small file starts with every package open. The workbench remounts this per file.
+  // A small app starts with its own packages open (never the libraries). The workbench remounts this per file.
   untrack(() => {
-    if (ws.classes.length > 60) return;
+    const own = ws.tree.total - (ws.tree.pkgs.find((p) => p.lib)?.total ?? 0);
+    if (own > 80) return;
     const walk = (p: Pkg) =>
       p.pkgs.forEach((sub) => {
+        if (sub.lib) return;
         open.add(sub.path);
         walk(sub);
       });
@@ -62,10 +85,16 @@
     return scored.map(([, c]) => c);
   });
 
-  const rows = $derived.by((): Row[] => {
+  const rows = $derived.by((): TreeRow[] => {
     if (matches) return matches.map((cls) => ({ type: "cls", key: cls.id, depth: 0, cls }));
     void open.size;
-    return visibleRows(ws.tree, open);
+    const base: TreeRow[] = visibleRows(ws.tree, open);
+    if (!current || !members.length || membersShut) return base;
+    const at = base.findIndex((r) => r.key === current);
+    if (at < 0) return base;
+    const depth = base[at].depth + 1;
+    const mems: TreeRow[] = members.map((m) => ({ type: "mem", key: `mem:${m.id}`, depth, mem: m }));
+    return [...base.slice(0, at + 1), ...mems, ...base.slice(at + 1)];
   });
 
   const first = $derived(Math.max(0, Math.floor(top / ROW) - OVERSCAN));
@@ -81,6 +110,7 @@
   $effect(() => {
     const cls = current;
     if (!cls || matches) return;
+    untrack(() => (membersShut = false));
     for (const p of pathsTo(ws.tree, cls)) open.add(p);
     tick().then(() => {
       const i = rows.findIndex((r) => r.key === cls);
@@ -113,11 +143,28 @@
     if (!r) return;
     cursor = i;
     if (r.type === "pkg") toggle(r.key);
+    else if (r.type === "mem") onmember(r.mem);
+    else if (r.cls.id === current && members.length) membersShut = !membersShut;
     else onopen(r.cls.id);
   }
 
   export function focusTree() {
     list?.focus();
+  }
+
+  /** Scrolls the open class into view, e.g. from the panel header. */
+  export function revealCurrent() {
+    const i = rows.findIndex((r) => r.key === current);
+    if (i >= 0) {
+      cursor = i;
+      scrollTo(i);
+    }
+  }
+
+  export function collapseAll() {
+    open.clear();
+    list.scrollTop = 0;
+    cursor = 0;
   }
 
   function onkeydown(e: KeyboardEvent) {
@@ -148,9 +195,9 @@
       case "ArrowLeft":
         if (r?.type === "pkg" && r.open) open.delete(r.key);
         else if (r) {
-          // Up to the parent package.
+          // Up to the parent.
           for (let i = cursor - 1; i >= 0; i--) {
-            if (rows[i].type === "pkg" && rows[i].depth < r.depth) {
+            if (rows[i].type !== "mem" && rows[i].depth < r.depth) {
               cursor = i;
               break;
             }
@@ -166,6 +213,11 @@
     e.preventDefault();
     scrollTo(cursor);
   }
+
+  const pad = (depth: number) => 8 + depth * STEP;
+  /** Indent guides, one per level above the row, centred under that level's twisty. */
+  const guides = (depth: number) => Array.from({ length: depth }, (_, k) => pad(k) + 8);
+  const memberKind = (m: Member) => (m.kind === "method" ? "m" : m.kind === "field" ? "f" : "c");
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -178,15 +230,16 @@
   onscroll={() => (top = list.scrollTop)}
   {onkeydown}
 >
-  <div class="sizer" style:height="{rows.length * ROW}px">
+  <div class="sizer" style:height="{rows.length * ROW + 12}px">
     {#each rows.slice(first, last) as r, j (r.key)}
       {@const i = first + j}
       {#if r.type === "pkg"}
         <div
           class="row pkg"
           class:cursor={i === cursor}
+          class:lib={r.pkg.lib}
           style:top="{i * ROW}px"
-          style:padding-left="{8 + r.depth * 14}px"
+          style:padding-left="{pad(r.depth)}px"
           role="treeitem"
           aria-expanded={r.open}
           aria-selected={i === cursor}
@@ -194,18 +247,40 @@
           onclick={() => activate(i)}
           onkeydown={() => {}}
         >
-          <span class="chev"><Icon name={r.open ? "chevronDown" : "chevronRight"} size={13} /></span>
+          {#each guides(r.depth) as x (x)}<span class="gd" style:left="{x}px"></span>{/each}
+          <span class="tw"><Icon name={r.open ? "chevronDown" : "chevronRight"} size={13} /></span>
           <span class="label">{r.pkg.label}</span>
+          {#if r.pkg.obf}<span class="obf" title="Most names in this package are obfuscated"><i></i>obfuscated</span>{/if}
           <span class="n">{fmtN(r.pkg.total)}</span>
+        </div>
+      {:else if r.type === "mem"}
+        <div
+          class="row mem"
+          class:cursor={i === cursor}
+          class:current={r.mem.id === memberAt}
+          style:top="{i * ROW}px"
+          style:padding-left="{pad(r.depth)}px"
+          role="treeitem"
+          aria-selected={r.mem.id === memberAt}
+          tabindex="-1"
+          onclick={() => activate(i)}
+          onkeydown={() => {}}
+        >
+          {#each guides(r.depth) as x (x)}<span class="gd" style:left="{x}px"></span>{/each}
+          <span class="tw"></span>
+          <span class="k k-{memberKind(r.mem)}">{r.mem.kind === "class" ? "C" : memberKind(r.mem)}</span>
+          <span class="label">{r.mem.name}<span class="dim">{r.mem.params}</span></span>
+          {#if ws.project.renames[r.mem.id]}<span class="was" title="You renamed it">renamed</span>{/if}
         </div>
       {:else}
         {@const renamed = ws.isRenamed(r.cls.id)}
+        {@const hasMembers = !matches && r.cls.id === current && members.length > 0}
         <div
           class="row cls"
           class:cursor={i === cursor}
-          class:current={r.cls.id === current}
+          class:current={r.cls.id === current && !members.some((m) => m.id === memberAt)}
           style:top="{i * ROW}px"
-          style:padding-left="{matches ? 10 : 8 + r.depth * 14 + 17}px"
+          style:padding-left="{matches ? 8 : pad(r.depth)}px"
           role="treeitem"
           aria-selected={r.cls.id === current}
           tabindex="-1"
@@ -218,8 +293,13 @@
             oncontext(e, r.cls.id);
           }}
         >
-          <span class="kind k-{r.cls.kind}">{KIND_LETTER[r.cls.kind]}</span>
+          {#if !matches}
+            {#each guides(r.depth) as x (x)}<span class="gd" style:left="{x}px"></span>{/each}
+            <span class="tw">{#if hasMembers}<Icon name={membersShut ? "chevronRight" : "chevronDown"} size={13} />{/if}</span>
+          {/if}
+          <span class="k {KIND_CLASS[r.cls.kind]}">{KIND_LETTER[r.cls.kind]}</span>
           <span class="label" class:renamed>{ws.className(r.cls.id)}</span>
+          {#if renamed}<span class="was">was {r.cls.id.slice(r.cls.id.lastIndexOf("/") + 1)}</span>{/if}
           {#if matches}
             <span class="pkgname">{dotted(r.cls.id.slice(0, Math.max(0, r.cls.id.lastIndexOf("/"))))}</span>
           {/if}
@@ -239,7 +319,7 @@
     overflow: auto;
     position: relative;
     outline: none;
-    font-size: 12.5px;
+    padding: 0 6px;
   }
   .sizer {
     position: relative;
@@ -248,78 +328,90 @@
     position: absolute;
     left: 0;
     right: 0;
-    height: 24px;
+    height: 28px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     padding-right: 10px;
+    border-radius: 7px;
     white-space: nowrap;
     cursor: pointer;
     color: var(--text);
   }
   .row:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--hover);
   }
-  .tree:focus .row.cursor {
-    box-shadow: inset 0 0 0 1px var(--line-2);
+  .tree:focus-visible .row.cursor {
+    box-shadow: inset 0 0 0 1px var(--edge);
   }
   .row.current {
     background: var(--sel);
+    color: var(--text-hi);
   }
-  .chev {
+  .gd {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--line);
+  }
+  .tw {
+    width: 16px;
+    height: 16px;
+    flex: none;
     display: grid;
     place-items: center;
-    width: 13px;
-    color: var(--faint);
-  }
-  .pkg .label {
-    color: var(--muted);
+    margin-right: -3px;
+    color: var(--text-3);
   }
   .label {
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .lib .label {
+    color: var(--text-2);
+  }
   .label.renamed {
     color: var(--text-hi);
-    font-style: italic;
+  }
+  .dim {
+    color: var(--text-3);
+  }
+  .was {
+    flex: none;
+    font: 12px var(--font-code);
+    color: var(--text-3);
+  }
+  .obf {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--text-3);
+  }
+  .obf i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--m-obf);
   }
   .n {
     margin-left: auto;
     padding-left: 8px;
-    font: 11px var(--font-code);
-    color: var(--faint);
-  }
-  .kind {
-    flex: none;
-    width: 11px;
-    text-align: center;
-    font: 600 10.5px var(--font-code);
-  }
-  .k-class {
-    color: var(--c-type);
-  }
-  .k-interface {
-    color: var(--c-keyword);
-  }
-  .k-enum {
-    color: var(--c-number);
-  }
-  .k-annotation {
-    color: var(--c-annotation);
-  }
-  .k-record {
-    color: var(--c-method);
+    font-size: 12.5px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
   }
   .pkgname {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    font: 11px var(--font-code);
-    color: var(--faint);
+    font-size: 12.5px;
+    color: var(--text-3);
   }
   .none {
     margin: 0;
-    padding: 14px 12px;
-    color: var(--faint);
+    padding: 14px 10px;
+    color: var(--text-3);
   }
 </style>

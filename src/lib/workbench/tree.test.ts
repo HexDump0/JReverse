@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTree, pathsTo, visibleRows } from "./tree";
+import { buildClassTree, buildTree, LIBRARIES, pathsTo, visibleRows } from "./tree";
 
 const cls = (id: string) => ({ id, kind: "class" as const });
 
@@ -29,5 +29,16 @@ describe("tree", () => {
   it("knows which packages to open to reveal a class", () => {
     expect(pathsTo(root, "com/example/app/ui/View")).toEqual(["com/example/app", "com/example/app/ui"]);
     expect(pathsTo(root, "Top")).toEqual([]);
+  });
+
+  it("groups libraries after the app's own packages", () => {
+    const lib = (id: string) => id.startsWith("okhttp3/") || id.startsWith("kotlin/");
+    const t = buildClassTree([cls("com/app/Main"), cls("okhttp3/Call"), cls("kotlin/Unit"), cls("a/a"), cls("a/b"), cls("a/c")], lib, (id) => id.startsWith("a/"));
+    expect(t.pkgs.map((p) => p.label)).toEqual(["a", "com.app", "Libraries"]);
+    expect(t.pkgs[0].obf).toBe(true);
+    expect(t.pkgs[2].pkgs.map((p) => p.label)).toEqual(["kotlin", "okhttp3"]);
+    expect(pathsTo(t, "okhttp3/Call")).toEqual([LIBRARIES, "okhttp3"]);
+    // All library: nothing to put first, so no group.
+    expect(buildClassTree([cls("okhttp3/Call")], lib, () => false).pkgs.map((p) => p.label)).toEqual(["okhttp3"]);
   });
 });

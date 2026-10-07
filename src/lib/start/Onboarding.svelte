@@ -117,7 +117,7 @@
     grid-template-rows: 1fr auto;
     justify-items: center;
     padding: 0 24px 72px;
-    background: var(--void);
+    background: var(--frame);
     color: var(--text-hi);
   }
   .fx {
@@ -159,7 +159,7 @@
     padding: 0 24px 0 10px;
     border-radius: 11px;
     background: var(--accent);
-    color: #0d1020;
+    color: var(--on-accent);
     font: 600 15px var(--font-ui);
   }
   .go:hover {
@@ -170,8 +170,8 @@
     outline-offset: 3px;
   }
   .go .key {
-    background: rgba(13, 16, 32, 0.12);
-    color: #0d1020;
-    box-shadow: inset 0 0 0 1px rgba(13, 16, 32, 0.25);
+    background: color-mix(in srgb, var(--on-accent) 12%, transparent);
+    color: var(--on-accent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-accent) 25%, transparent);
   }
 </style>

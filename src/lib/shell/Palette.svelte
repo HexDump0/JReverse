@@ -133,20 +133,17 @@
     left: 50%;
     transform: translateX(-50%);
     width: min(600px, calc(100% - 32px));
-    background: #16181a;
-    border-radius: 10px;
-    box-shadow:
-      0 0 0 1px #2b2f32,
-      0 24px 60px rgba(0, 0, 0, 0.65);
+    background: var(--raised);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
     overflow: hidden;
-    font-size: 13px;
   }
   input {
     width: 100%;
     height: 48px;
     padding: 0 18px;
     border: 0;
-    border-bottom: 1px solid var(--rule);
+    border-bottom: 1px solid var(--line);
     background: transparent;
     font-size: 14.5px;
     color: var(--text-hi);
@@ -172,13 +169,13 @@
     width: 100%;
     height: 34px;
     padding: 0 12px;
-    border-radius: 6px;
+    border-radius: 8px;
     white-space: nowrap;
     text-align: left;
     color: var(--text-hi);
   }
   .pi.on {
-    background: var(--lift-2);
+    background: var(--sel);
   }
   .label {
     overflow: hidden;

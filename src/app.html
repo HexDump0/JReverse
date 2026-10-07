@@ -1,13 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="graphite">
   <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>JReverse</title>
+    <script>
+      // The saved theme, before the first paint (src/lib/theme.svelte.ts).
+      try {
+        var t = localStorage.getItem("jreverse.theme");
+        if (t === "graphite" || t === "indigo" || t === "paper") document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
     %sveltekit.head%
   </head>
-  <body data-sveltekit-preload-data="hover" style="margin:0; background:#17191a; color:#e6e2de">
+  <body data-sveltekit-preload-data="hover">
     <div style="display: contents">%sveltekit.body%</div>
   </body>
 </html>

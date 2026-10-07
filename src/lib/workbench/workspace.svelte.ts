@@ -25,7 +25,8 @@ import { say, setTask } from "$lib/status.svelte";
 import { enclosing, findDecl, hexDoc, javaDoc, plainDoc, smaliDoc, xmlDoc, type Doc, type Pos, type View } from "./doc";
 import { fmtN, fmtSize } from "$lib/format";
 import { dotted, ownerOf, simpleName } from "./ids";
-import { buildTree, type Pkg } from "./tree";
+import { libraryOf, looksObfuscated } from "./android";
+import { buildClassTree, type Pkg } from "./tree";
 import type { Reveal } from "./CodeView.svelte";
 
 export type TabKind = "overview" | "class" | "manifest" | "file";
@@ -108,7 +109,7 @@ export class Workspace {
     this.opened = opened;
     this.classes = classes;
     this.byId = new Map(classes.map((c) => [c.id, c]));
-    this.tree = buildTree(classes);
+    this.tree = buildClassTree(classes, (id) => libraryOf(id) !== null, looksObfuscated);
   }
 
   get session() {

@@ -10,26 +10,24 @@
 </script>
 
 <script lang="ts">
-  // The start screen from design/start-mockup.html. Left: the dark stage where a
-  // file goes in (the beam). The prism sits on the seam. Right: the shelf of
-  // files opened before; a faint ray from the prism lands on the selected one.
+  // The home screen: the mark, an Open button, and the files you opened before,
+  // one line each. The selected one opens up to show where you were and your
+  // open tabs, ready to continue. A file can be dropped anywhere in the window.
   import { tick } from "svelte";
-  import type { RecentView } from "$lib/engine";
+  import { getVersion } from "@tauri-apps/api/app";
+  import { loadProject, saveProject, type InputKind, type Project, type RecentView } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
-  import Dots from "$lib/Dots.svelte";
+  import type { IconName } from "$lib/icons";
   import { baseName, dirName, fmtN, fmtSize, fmtWhen, kindLabel, tildify } from "$lib/format";
 
   interface Props {
     recents: RecentView[];
     /** The bundled example app, offered on first run. */
     example: { path: string; peek: Peek } | null;
-    /** Where the Continue file was left: the class in its active tab, and how many notes it has. */
-    resume: { path: string; at: string | null; notes: number } | null;
     home: string | null;
-    /** The file just dropped or picked, shown under the beam. */
+    /** The file just dropped or picked, while it's checked; kept when it can't be opened. */
     readout: Peek | null;
     opening: Opening | null;
-    drag: boolean;
     /** Whether keys go to this screen (false while the palette is open). */
     active: boolean;
     onopen: (path: string) => void;
@@ -42,34 +40,19 @@
     onclear: () => void;
   }
 
-  let {
-    recents,
-    example,
-    resume,
-    home,
-    readout,
-    opening,
-    drag,
-    active,
-    onopen,
-    onbrowse,
-    oncancel,
-    ondismiss,
-    onremove,
-    onreveal,
-    onlocate,
-    onclear,
-  }: Props = $props();
+  let { recents, example, home, readout, opening, active, onopen, onbrowse, oncancel, ondismiss, onremove, onreveal, onlocate, onclear }: Props = $props();
+
+  const SHOWN = 8;
 
   let query = $state("");
   let sel = $state(0);
-  let work: HTMLDivElement;
-  let stage: HTMLElement;
-  let anchor: HTMLDivElement;
-  let shelf: HTMLElement;
+  let all = $state(false);
+  let list = $state<HTMLDivElement>();
   let filterInput = $state<HTMLInputElement>();
+  let version = $state("");
+  getVersion().then((v) => (version = v), () => {});
 
-  // The bundled example is always on the list: the default on first run, the last
+  // The bundled example is always on the list: the only entry on first run, the last
   // row after that. Once opened it is an ordinary recent file.
   const known = $derived.by(() => {
     if (!example || recents.some((r) => r.path === example.path)) return recents;
@@ -77,55 +60,86 @@
     return [...recents, { path: example.path, kind: p.kind ?? "jar", classCount: p.classes ?? 0, size: p.size, openedAt: 0, missing: false }];
   });
 
-  // A file opened for the first time sits in the list while it loads.
+  // A file opened for the first time sits at the top while it loads.
   const entries = $derived.by(() => {
     if (!opening || known.some((r) => r.path === opening.path)) return known;
     const p = opening.peek;
-    const fresh: RecentView = {
-      path: opening.path,
-      kind: p.kind ?? "jar",
-      classCount: p.classes ?? 0,
-      size: p.size,
-      openedAt: Date.now(),
-      missing: false,
-    };
-    return known.length ? [known[0], fresh, ...known.slice(1)] : [fresh];
+    return [{ path: opening.path, kind: p.kind ?? "jar", classCount: p.classes ?? 0, size: p.size, openedAt: Date.now(), missing: false }, ...known];
   });
 
   const rows = $derived.by(() => {
     const q = query.trim().toLowerCase();
-    const rest = entries.slice(1);
-    return q ? rest.filter((r) => r.path.toLowerCase().includes(q)) : rest;
+    if (q) return entries.filter((r) => baseName(r.path).toLowerCase().includes(q));
+    return all ? entries : entries.slice(0, SHOWN);
   });
 
-  const itemAt = (k: number) => (k === 0 ? entries[0] : rows[k - 1]);
   const isLoading = (r: RecentView) => opening?.path === r.path;
   const isExample = (r: RecentView) => r.path === example?.path && r.openedAt === 0;
-  const dirOf = (r: RecentView) => tildify(dirName(r.path), home);
-  const blocked = $derived(!!readout?.problem);
+  const where = (r: RecentView) => tildify(dirName(r.path), home);
+
+  /* ---------- where you were, for the selected file ---------- */
+  const projects = new Map<string, Project | null>();
+  let project = $state<Project | null>(null);
 
   $effect(() => {
-    sel = Math.max(0, Math.min(sel, rows.length));
+    const r = rows[sel];
+    project = null;
+    if (!r || r.missing || isExample(r)) return;
+    const path = r.path;
+    if (projects.has(path)) return void (project = projects.get(path)!);
+    loadProject(path).then(
+      (p) => {
+        projects.set(path, p);
+        if (rows[sel]?.path === path) project = p;
+      },
+      () => projects.set(path, null),
+    );
   });
 
-  // Whatever is being opened gets selected, so the ray lands on it.
+  const simple = (id: string) => {
+    const s = id.slice(id.lastIndexOf("/") + 1);
+    return s.slice(s.lastIndexOf("$") + 1);
+  };
+  const lastIn = $derived.by(() => {
+    const cls = project?.active?.startsWith("class:") ? project.active.slice(6) : null;
+    return cls ? (project?.renames[cls] ?? simple(cls)) : null;
+  });
+  const noteCount = $derived(project ? Object.keys(project.renames).length + Object.keys(project.comments).length + project.bookmarks.length : 0);
+  const tabs = $derived((project?.tabs ?? []).slice(0, 4));
+
+  /** Opens the file with a given tab in front. */
+  async function openAt(r: RecentView, cls: string | null) {
+    if (project && cls !== undefined) {
+      const p = { ...$state.snapshot(project), active: cls ? `class:${cls}` : "overview" };
+      await saveProject(r.path, p).catch(() => {});
+      projects.set(r.path, p);
+    }
+    onopen(r.path);
+  }
+
+  $effect(() => {
+    sel = Math.max(0, Math.min(sel, rows.length - 1));
+  });
+
+  // Whatever is being opened gets selected.
   $effect(() => {
     const path = opening?.path;
     if (!path) return;
     query = "";
-    const k = entries.findIndex((r) => r.path === path);
+    const k = rows.findIndex((r) => r.path === path);
     if (k >= 0) sel = k;
   });
 
   async function select(k: number) {
     sel = k;
     await tick();
-    if (k > 0) shelf.querySelector(`[data-sel="${k}"]`)?.scrollIntoView({ block: "nearest" });
+    list?.querySelector(`[data-sel="${k}"]`)?.scrollIntoView({ block: "nearest" });
   }
 
   function open(r: RecentView | undefined) {
     if (!r || isLoading(r)) return;
-    onopen(r.path);
+    if (r.missing) onlocate(r);
+    else onopen(r.path);
   }
 
   function onkeydown(e: KeyboardEvent) {
@@ -142,84 +156,29 @@
       }
       return;
     }
-    if (!entries.length || opening) return;
+    if (!rows.length || opening) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      const n = rows.length + 1;
-      select((sel + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+      select((sel + (e.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length);
       return;
     }
     if (e.key === "Enter" && !(e.target instanceof HTMLButtonElement)) {
       e.preventDefault();
-      open(itemAt(sel));
+      open(rows[sel]);
       return;
     }
     if (inFilter || mod || e.altKey) return;
-    if ((e.key === "Delete" || e.key === "Backspace") && sel > 0) {
+    if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
-      const r = itemAt(sel);
+      const r = rows[sel];
       if (r && !isExample(r)) onremove(r);
       return;
     }
-    if (e.key.length === 1 && e.key !== " ") filterInput?.focus();
+    if (e.key.length === 1 && e.key !== " " && filterInput) filterInput.focus();
   }
 
-  /* ---------- the beam, the prism and the ray to the selected file ---------- */
-  let fx = $state({ lit: "", shade: "", bx0: 0, bx1: 0, by: 0, ray: "", rx0: 0, rx1: 0, ry: 0 });
-
-  function layout() {
-    if (!work) return;
-    const W = work.getBoundingClientRect();
-    const st = stage.getBoundingClientRect();
-    const an = anchor.getBoundingClientRect();
-    const yb = an.top - W.top;
-    const x0 = an.left - W.left;
-    const seam = st.right - W.left;
-    const pw = 52;
-    const ph = 46;
-    const top = yb - 0.62 * ph;
-    const inX = seam - (0.62 * pw) / 2;
-    const ye = top + 0.55 * ph;
-    const outX = seam + (0.55 * pw) / 2;
-    const next = {
-      lit: `${seam},${top} ${seam},${top + ph} ${seam - pw / 2},${top + ph}`,
-      shade: `${seam},${top} ${seam + pw / 2},${top + ph} ${seam},${top + ph}`,
-      bx0: x0,
-      bx1: inX,
-      by: yb,
-      ray: "",
-      rx0: outX,
-      rx1: outX,
-      ry: ye,
-    };
-    // The ray lands on whatever is selected, if it is on screen.
-    const target = !blocked && shelf.querySelector(`[data-sel="${sel}"]`);
-    if (target) {
-      const sh = shelf.getBoundingClientRect();
-      const t = target.getBoundingClientRect();
-      const mid = (t.top + t.bottom) / 2;
-      if (mid > sh.top + 8 && mid < sh.bottom - 8) {
-        const inset = Math.min(14, t.height * 0.25);
-        const x1 = t.left - W.left;
-        next.ray = `${outX},${ye - 1} ${x1},${t.top - W.top + inset} ${x1},${t.bottom - W.top - inset} ${outX},${ye + 1}`;
-        next.rx1 = x1;
-      }
-    }
-    fx = next;
-  }
-
-  $effect(() => {
-    // Re-layout after anything that moves the anchor or the selected row.
-    void [sel, rows, entries, readout, drag, opening?.path, blocked];
-    tick().then(layout);
-  });
-
-  $effect(() => {
-    const ro = new ResizeObserver(layout);
-    ro.observe(work);
-    document.fonts?.ready.then(layout);
-    return () => ro.disconnect();
-  });
+  const ICON: Record<InputKind, IconName> = { apk: "android", aab: "android", dex: "fileCode", jar: "coffee", aar: "box", class: "coffee" };
+  const TINT: Record<InputKind, string> = { apk: "var(--ok)", aab: "var(--ok)", dex: "var(--c-type)", jar: "var(--c-number)", aar: "var(--c-keyword)", class: "var(--c-number)" };
 
   const hex = (b: number) => b.toString(16).toUpperCase().padStart(2, "0");
   const ascii = (b: number) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : ".");
@@ -227,643 +186,393 @@
 
 <svelte:window {onkeydown} />
 
-<div class="work" class:hot={drag || !!opening} class:blocked bind:this={work}>
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-  <section
-    class="stage"
-    aria-label="Open a file"
-    bind:this={stage}
-    onscroll={layout}
-    onclick={(e) => !(e.target as Element).closest("button") && onbrowse()}
-  >
-    <h1 class="hero">{drag ? "Let go to open." : "Drop a file to decompile."}</h1>
-    <p class="sub">or <button class="pick" onclick={onbrowse}>choose one</button><span class="hk">Ctrl+O</span></p>
-    <p class="fmt"><Dots parts={["APK", "AAB", "AAR", "JAR", "WAR", "DEX", "class"]} /></p>
-    <div class="anchor" bind:this={anchor}></div>
-    {#if readout}
+<div class="home island">
+  <div class="in">
+    <header class="hero">
+      <svg class="mark" viewBox="1 12 62 36" aria-hidden="true"
+        ><polygon points="2.50,33.90 25.64,26.72 25.64,29.92 2.50,37.10" fill="#cdd7fa" /><polygon
+          points="38.75,29.20 61.50,19.40 61.50,22.60 38.75,32.40"
+          fill="#cdd7fa"
+        /><polygon points="38.75,29.20 61.50,25.90 61.50,29.10 38.75,32.40" fill="#a4b7f1" /><polygon
+          points="38.75,29.20 61.50,32.40 61.50,35.60 38.75,32.40"
+          fill="#6f82cf"
+        /><polygon points="38.75,29.20 61.50,38.90 61.50,42.10 38.75,32.40" fill="#4f5f9e" /><polygon
+          points="32.00,13.00 32.00,47.00 12.50,47.00"
+          fill="#cdd7fa"
+        /><polygon points="32.00,13.00 51.50,47.00 32.00,47.00" fill="#6f82cf" /></svg
+      >
+      <div>
+        <h1>JReverse</h1>
+        {#if version}<p>Version {version}</p>{/if}
+      </div>
+      <span class="sp"></span>
+      <button class="btn" onclick={onbrowse}><Icon name="folderOpen" size={16} />Open file<kbd>Ctrl O</kbd></button>
+    </header>
+
+    {#if readout?.problem}
       {@const head = readout.head.slice(0, 8)}
-      <div class="ro" class:bad={!!readout.problem}>
-        <div class="ro-h"><span class="ro-n">{readout.name}</span><span class="ro-s">{fmtSize(readout.size)}</span></div>
-        <div class="hex">
-          <span class="off">00000000</span>
-          <span><span class="mg">{head.slice(0, 4).map(hex).join(" ")}</span> {head.slice(4).map(hex).join(" ")}</span>
-          <span class="as">{head.map(ascii).join("")}</span>
+      <div class="problem" role="alert">
+        <Icon name="alert" size={18} />
+        <div class="pb">
+          <b>Can't open {readout.name}: {readout.problem.title}</b>
+          <p>{readout.problem.text}</p>
+          <p class="hex">
+            <span class="dim">{fmtSize(readout.size)}, starts with</span>
+            <code>{head.map(hex).join(" ")}</code>
+            <code class="dim">{head.map(ascii).join("")}</code>
+          </p>
         </div>
-        {#if readout.problem}
-          <div class="ro-r">{readout.problem.title}</div>
-          <p class="ro-e">{readout.problem.text}</p>
-        {:else if readout.kind}
-          <div class="ro-r"><Icon name="arrowRight" size={14} /><span><Dots parts={[kindLabel(readout.kind), readout.detail]} /></span></div>
+        <button class="ib" title="Dismiss (Esc)" onclick={ondismiss}><Icon name="x" size={15} /></button>
+      </div>
+    {/if}
+
+    {#if entries.length}
+      <div class="head">
+        <h2>{recents.length ? "Recent" : "Start with the example"}</h2>
+        {#if recents.length}<span class="n">{fmtN(recents.length)}</span>{/if}
+        {#if entries.length > SHOWN}
+          <label class="field">
+            <Icon name="filter" size={14} />
+            <input bind:this={filterInput} bind:value={query} oninput={() => (sel = 0)} placeholder="Filter" autocomplete="off" spellcheck="false" aria-label="Filter recent files" />
+          </label>
         {/if}
       </div>
-    {/if}
-  </section>
 
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <section class="shelf" aria-label="Recent files" bind:this={shelf} onscroll={layout}>
-    <div class="shelf-in">
-    {#if entries.length}
-      {@const first = entries[0]}
-      {@const ex = isExample(first)}
-      {@const left = resume?.path === first.path ? resume : null}
-      <div
-        class="cont"
-        class:sel={sel === 0}
-        class:loading={isLoading(first)}
-        data-sel="0"
-        role="option"
-        aria-selected={sel === 0}
-        tabindex="-1"
-        onclick={() => {
-          select(0);
-          open(first);
-        }}
-      >
-        <div class="c-top"><span>{ex ? "Example" : "Continue"}</span>{#if !ex}<span>{fmtWhen(first.openedAt)}</span>{/if}</div>
-        <div class="c-name">{baseName(first.path)}</div>
-        <div class="c-id" title={first.path}>
-          <Dots parts={[!ex && dirOf(first), first.classCount > 0 && `${fmtN(first.classCount)} classes`]} />
-        </div>
-        <div class="c-at">
-          {#if left?.at}<span>Last in <b>{left.at}</b></span>{/if}
-          {#if left?.notes}<span>{left.notes} {left.notes === 1 ? "note" : "notes"}</span>{/if}
-        </div>
-        <div class="c-foot">
-          {#if isLoading(first)}
-            <span class="c-load">{opening?.text}</span><span class="c-go"><i class="spin"></i>Esc to cancel</span>
-          {:else if first.missing}
-            <span class="c-miss">Moved or deleted</span>
-            <span class="c-acts">
-              <button class="tb" onclick={(e) => (e.stopPropagation(), onlocate(first))}>Locate</button>
-              <button class="tb" onclick={(e) => (e.stopPropagation(), onremove(first))}>Remove</button>
-            </span>
-          {:else}
-            <span><Dots parts={[kindLabel(first.kind), first.size > 0 && fmtSize(first.size)]} /></span>
-            <span class="c-go"><span class="key">Enter</span> to {ex ? "open" : "resume"}</span>
-          {/if}
-        </div>
-      </div>
-
-      {#if entries.length > 1}
-      <div class="rhead">
-        <h2>Recent</h2>
-        <span class="n">{entries.length - 1}</span>
-        <label class="filter">
-          <Icon name="search" size={14} />
-          <input
-            bind:this={filterInput}
-            bind:value={query}
-            oninput={() => (sel = query ? 1 : 0)}
-            placeholder="Filter"
-            autocomplete="off"
-            spellcheck="false"
-            aria-label="Filter recent files"
-          />
-        </label>
-      </div>
-      <div class="cols" aria-hidden="true">
-        <span>Name</span><span class="ck">Type</span><span class="r">Classes</span><span class="r">Opened</span>
-      </div>
-      <div role="listbox" aria-label="Recent files">
-        {#each rows as r, i (r.path)}
-          {@const k = i + 1}
+      <div class="list" role="listbox" aria-label="Recent files" bind:this={list}>
+        {#each rows as r, k (r.path)}
+          {@const on = sel === k}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
-            class="row"
-            class:sel={sel === k}
+            class="rec"
+            class:on
             class:missing={r.missing}
-            class:loading={isLoading(r)}
             data-sel={k}
             role="option"
-            aria-selected={sel === k}
+            aria-selected={on}
             tabindex="-1"
-            onclick={() => {
-              select(k);
-              open(r);
-            }}
+            onclick={() => (on ? open(r) : select(k))}
+            ondblclick={() => open(r)}
           >
-            <div class="r-main" title={r.path}>
-              <div class="r-name"><span>{baseName(r.path)}</span></div>
-              <div class="r-sub">{isLoading(r) ? opening?.text : r.missing ? "Moved or deleted" : isExample(r) ? "Example" : dirOf(r)}</div>
-            </div>
-            <span class="r-kind">{r.kind.toUpperCase()}</span>
-            <span class="r-n">{r.classCount > 0 ? fmtN(r.classCount) : ""}</span>
-            <span class="r-when">
-              {#if isLoading(r)}
-                <i class="spin"></i>
-              {:else if !isExample(r)}
-                <span class="t">{fmtWhen(r.openedAt)}</span>
-                <span class="acts">
-                  {#if r.missing}
-                    <button class="tb" onclick={(e) => (e.stopPropagation(), onlocate(r))}>Locate</button>
-                    <button class="tb" onclick={(e) => (e.stopPropagation(), onremove(r))}>Remove</button>
-                  {:else}
-                    <button class="ib" title="Show in folder" onclick={(e) => (e.stopPropagation(), onreveal(r))}>
-                      <Icon name="folder" />
-                    </button>
-                    <button class="ib" title="Remove from list (Del)" onclick={(e) => (e.stopPropagation(), onremove(r))}>
-                      <Icon name="x" />
-                    </button>
-                  {/if}
+            <span class="ic" style:color={TINT[r.kind]} style:background="color-mix(in srgb, {TINT[r.kind]} 16%, var(--panel))"><Icon name={ICON[r.kind]} size={21} /></span>
+            <div class="tx">
+              <div class="t1">
+                <b>{baseName(r.path)}</b>
+                <span class="sub">{isExample(r) ? "Example app, bundled with JReverse" : where(r)}</span>
+                <span class="when">
+                  {#if isLoading(r)}<i class="spin"></i>{:else if !isExample(r)}{fmtWhen(r.openedAt)}{/if}
                 </span>
+                {#if !isExample(r) && !isLoading(r)}
+                  <span class="acts">
+                    <button class="ib" title="Show in folder" onclick={(e) => (e.stopPropagation(), onreveal(r))}><Icon name="folder" size={15} /></button>
+                    <button class="ib" title="Remove from the list (Del)" onclick={(e) => (e.stopPropagation(), onremove(r))}><Icon name="x" size={15} /></button>
+                  </span>
+                {/if}
+              </div>
+              {#if on}
+                {#if isLoading(r)}
+                  <div class="more"><span class="dim">{opening?.text}</span><span class="go dim">Esc to cancel</span></div>
+                {:else if r.missing}
+                  <div class="more">
+                    <span class="bad">Moved or deleted</span>
+                    <span class="go">
+                      <button class="btn" onclick={(e) => (e.stopPropagation(), onremove(r))}>Remove</button>
+                      <button class="btn primary" onclick={(e) => (e.stopPropagation(), onlocate(r))}>Locate<kbd>Enter</kbd></button>
+                    </span>
+                  </div>
+                {:else}
+                  <div class="facts">
+                    {kindLabel(r.kind)}{#if r.size > 1}, {fmtSize(r.size)}{/if}{#if r.classCount > 0}, {fmtN(r.classCount)} classes{/if}
+                    {#if lastIn}<span class="was">You were in <code>{lastIn}</code></span>{/if}
+                    {#if noteCount}<span class="dim">{noteCount} {noteCount === 1 ? "note" : "notes"}</span>{/if}
+                  </div>
+                  <div class="more">
+                    {#each tabs as t (t.cls)}
+                      <button class="otab" title="Open with {simple(t.cls)} in front" onclick={(e) => (e.stopPropagation(), openAt(r, t.cls))}>
+                        <span class="k k-c">C</span>{project?.renames[t.cls] ?? simple(t.cls)}
+                      </button>
+                    {/each}
+                    <button class="btn primary go" onclick={(e) => (e.stopPropagation(), open(r))}>{tabs.length ? "Continue" : "Open"}<kbd>Enter</kbd></button>
+                  </div>
+                {/if}
               {/if}
-            </span>
+            </div>
           </div>
         {:else}
-          <div class="none">{query ? `Nothing matches ${query}` : "No other files yet"}</div>
+          <p class="none">Nothing matches {query}</p>
         {/each}
       </div>
-      <div class="sfoot">
-        <span class="keys"><span class="key"><Icon name="arrowUp" size={12} /></span><span class="key"><Icon name="arrowDown" size={12} /></span>select</span>
-        <span class="keys"><span class="key">Enter</span>open</span>
-        <span class="keys"><span class="key">Del</span>remove</span>
-        {#if recents.length > 1}<button class="clr" onclick={onclear}>Clear recent files</button>{/if}
-      </div>
-      {/if}
-    {/if}
-    </div>
-  </section>
 
-  <svg class="fx" aria-hidden="true">
-    <defs>
-      <linearGradient id="gBeam" gradientUnits="userSpaceOnUse" x1={fx.bx0} y1={fx.by} x2={fx.bx1} y2={fx.by}>
-        <stop offset="0" stop-color="#cdd7fa" stop-opacity="0" />
-        <stop offset=".6" stop-color="#cdd7fa" stop-opacity=".3" />
-        <stop offset="1" stop-color="#cdd7fa" stop-opacity=".9" />
-      </linearGradient>
-      <linearGradient id="gRay" gradientUnits="userSpaceOnUse" x1={fx.rx0} y1={fx.ry} x2={fx.rx1} y2={fx.ry}>
-        <stop offset="0" stop-color="#cdd7fa" stop-opacity=".34" />
-        <stop offset=".45" stop-color="#a4b7f1" stop-opacity=".1" />
-        <stop offset="1" stop-color="#a4b7f1" stop-opacity=".02" />
-      </linearGradient>
-    </defs>
-    <line class="beam" x1={fx.bx0} y1={fx.by} x2={fx.bx1} y2={fx.by} stroke="url(#gBeam)" stroke-linecap="round" />
-    <polygon class="ray" points={fx.ray} fill="url(#gRay)" />
-    <g class="prism"><polygon points={fx.lit} fill="#cdd7fa" /><polygon points={fx.shade} fill="#6f82cf" /></g>
-  </svg>
+      <div class="foot">
+        <span>Drop an APK, AAB, AAR, JAR, WAR, DEX or class file anywhere in this window.</span>
+        {#if !query && entries.length > SHOWN}
+          <button class="lnk" onclick={() => (all = !all)}>{all ? "Show fewer" : `Show all ${entries.length}`}</button>
+        {/if}
+        {#if recents.length > 1}<button class="lnk" onclick={onclear}>Clear recent files</button>{/if}
+      </div>
+    {:else}
+      <p class="none">Drop an APK, AAB, AAR, JAR, WAR, DEX or class file anywhere in this window, or open one.</p>
+    {/if}
+  </div>
 </div>
 
 <style>
-  .work {
+  .home {
     flex: 1;
-    min-height: 0;
-    display: grid;
-    grid-template-columns: minmax(400px, 40%) minmax(0, 1fr);
-    position: relative;
-    font: 13px/1.5 var(--font-ui);
-    color: var(--text-hi);
-  }
-  .stage {
-    background: var(--void);
-    padding: clamp(48px, 17vh, 150px) 96px 48px 60px;
-    display: flex;
-    flex-direction: column;
+    margin: 0 6px;
     overflow: auto;
-    min-width: 0;
-    cursor: pointer;
+    background: var(--editor);
   }
-  .stage:hover {
-    background: #0c0e0f;
-  }
-  .hot .stage {
-    background: #0d0f13;
-  }
-  .shelf {
-    background: var(--shelf);
-    padding: 52px 52px 40px 84px;
-    overflow: auto;
-    min-width: 0;
-  }
-  .fx {
-    position: absolute;
-    inset: 0;
+  .in {
     width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 3;
-    overflow: visible;
+    max-width: 840px;
+    margin: 0 auto;
+    padding: 9vh 32px 48px;
   }
-
-  /* stage */
   .hero {
-    margin: 0;
-    max-width: 11ch;
-    font: 600 46px/1.04 var(--font-ui);
-    letter-spacing: -0.035em;
-    text-wrap: balance;
-  }
-  .sub {
-    margin: 20px 0 0;
-    font-size: 14.5px;
-    color: var(--text-2);
-  }
-  .pick {
-    color: var(--text-hi);
-    text-decoration: underline;
-    text-decoration-color: #4b5156;
-    text-underline-offset: 4px;
-    text-decoration-thickness: 1px;
-  }
-  .pick:hover {
-    text-decoration-color: var(--accent);
-  }
-  .hk {
-    margin-left: 12px;
-    font: 12px var(--font-code);
-    color: var(--text-3);
-  }
-  .fmt {
-    margin: 6px 0 0;
-    font: 12px var(--font-code);
-    color: var(--text-3);
-    letter-spacing: 0.02em;
-  }
-  .anchor {
-    height: 1px;
-    margin: 52px 0 40px;
-  }
-  .ro {
-    cursor: default;
-  }
-  .ro-h {
     display: flex;
-    align-items: baseline;
-    gap: 10px;
-    margin-bottom: 10px;
+    align-items: center;
+    gap: 18px;
+    padding: 0 14px 34px;
   }
-  .ro-n {
-    font: 500 14px var(--font-ui);
-    overflow-wrap: anywhere;
+  .mark {
+    width: 64px;
+    height: 37px;
+    flex: none;
   }
-  .ro-s {
-    font: 12px var(--font-code);
+  h1 {
+    margin: 0;
+    font: 600 26px/1.1 var(--font-ui);
+    letter-spacing: -0.02em;
+    color: var(--text-hi);
+  }
+  .hero p {
+    margin: 5px 0 0;
     color: var(--text-3);
+  }
+  .sp {
+    flex: 1;
+  }
+  .problem {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 0 0 24px;
+    padding: 14px 12px 14px 16px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bad) 10%, var(--panel));
+    color: var(--bad);
+  }
+  .problem :global(svg) {
+    margin-top: 1px;
+  }
+  .pb {
+    flex: 1;
+    min-width: 0;
+    color: var(--text);
+  }
+  .pb b {
+    font-weight: 600;
+    color: var(--text-hi);
+  }
+  .pb p {
+    margin: 4px 0 0;
+    color: var(--text-2);
   }
   .hex {
     display: flex;
+    gap: 10px;
     flex-wrap: wrap;
-    gap: 4px 18px;
-    font: 13px/1.6 var(--font-code);
-    color: var(--text-2);
   }
-  .off,
-  .as {
-    color: var(--text-3);
+  .hex code {
+    font-size: 12.5px;
+    color: var(--text);
   }
-  .mg {
-    color: var(--beam-lit);
-    background: rgba(164, 183, 241, 0.14);
-    border-radius: 3px;
-    padding: 0 3px;
-    margin: 0 -3px;
-  }
-  .ro-r {
+  .head {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 10px;
-    font: 13px var(--font-code);
-    color: var(--accent);
+    margin: 0 0 8px;
+    padding: 0 14px;
+    height: 32px;
   }
-  .bad .mg {
-    color: var(--error);
-    background: rgba(241, 123, 113, 0.13);
-  }
-  .bad .ro-r {
-    color: var(--error);
-    font-family: var(--font-ui);
-    font-weight: 500;
-  }
-  .ro-e {
-    margin: 6px 0 0;
-    max-width: 44ch;
+  h2 {
+    margin: 0;
+    font: 600 14px var(--font-ui);
     color: var(--text-2);
   }
-
-  .shelf-in {
-    min-height: 100%;
+  .head .n {
+    color: var(--text-3);
+  }
+  .head .field {
+    margin: 0 0 0 auto;
+    width: 220px;
+    height: 30px;
+  }
+  .list {
     display: flex;
     flex-direction: column;
+    gap: 3px;
   }
-
-  /* shelf: continue */
-  .cont {
-    display: block;
-    width: 100%;
-    padding: 22px 26px 20px;
-    border-radius: 12px;
-    background: var(--lift);
+  .rec {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 11px 14px;
+    border-radius: 13px;
+    border: 1px solid transparent;
     cursor: pointer;
     outline: none;
   }
-  .cont:hover,
-  .cont.sel {
-    background: var(--lift-2);
+  .rec:hover {
+    background: var(--panel);
   }
-  .c-top {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    font-size: 12.5px;
-    color: var(--text-3);
+  .rec.on {
+    background: var(--panel);
+    border-color: var(--edge);
+    padding: 16px 16px 16px 14px;
   }
-  .c-name {
-    margin: 8px 0 3px;
-    font: 600 24px/1.15 var(--font-ui);
-    letter-spacing: -0.02em;
-    overflow-wrap: anywhere;
+  .ic {
+    width: 42px;
+    height: 42px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 11px;
   }
-  .c-id {
-    font: 12.5px var(--font-code);
-    color: var(--text-3);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .missing .ic {
+    filter: grayscale(1);
+    opacity: 0.6;
   }
-  .c-at {
-    display: flex;
-    gap: 18px;
-    margin-top: 10px;
-    font-size: 12.5px;
-    color: var(--text-3);
-  }
-  .c-at:empty {
-    display: none;
-  }
-  .c-at b {
-    font-weight: 500;
-    color: var(--text-2);
-  }
-  .c-foot {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 22px;
-    min-height: 26px;
-    margin-top: 22px;
-    padding-top: 16px;
-    border-top: 1px solid var(--rule);
-    font-size: 12.5px;
-    color: var(--text-3);
-  }
-  .c-load {
-    color: var(--accent);
-  }
-  .c-miss {
-    color: var(--obf);
-  }
-  .c-acts {
-    margin-left: auto;
-    display: flex;
-    gap: 2px;
-  }
-  .c-go {
-    margin-left: auto;
-    color: var(--text-2);
-    opacity: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .cont.sel .c-go,
-  .cont.loading .c-go {
-    opacity: 1;
-  }
-
-  /* shelf: recent list */
-  .rhead {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin: 44px 0 6px;
-  }
-  .rhead h2 {
-    margin: 0;
-    font: 600 15px var(--font-ui);
-    letter-spacing: -0.01em;
-  }
-  .rhead .n {
-    font: 12px var(--font-code);
-    color: var(--text-3);
-  }
-  .filter {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 220px;
-    min-width: 0;
-    height: 30px;
-    padding: 0 10px;
-    border-radius: 7px;
-    background: #0c0d0e;
-    color: var(--text-3);
-    box-shadow: inset 0 0 0 1px var(--rule);
-  }
-  .filter:focus-within {
-    box-shadow: inset 0 0 0 1px var(--beam-shade);
-  }
-  .filter input {
+  .tx {
     flex: 1;
     min-width: 0;
-    border: 0;
-    outline: none;
-    background: transparent;
-    font-size: 12.5px;
+    padding-top: 1px;
+  }
+  .t1 {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-height: 40px;
+    white-space: nowrap;
+  }
+  .rec.on .t1 {
+    min-height: 0;
+  }
+  .t1 b {
+    font-weight: 600;
+    font-size: 15px;
     color: var(--text-hi);
-  }
-  .filter input::placeholder {
-    color: var(--text-3);
-  }
-  .row,
-  .cols {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 52px 96px 104px;
-    grid-template-areas: "main kind n when";
-    align-items: center;
-    gap: 18px;
-    width: calc(100% + 32px);
-    margin: 0 -16px;
-    padding: 12px 16px;
-  }
-  .cols {
-    padding-top: 6px;
-    padding-bottom: 6px;
-    font-size: 12px;
-    color: var(--text-3);
-    border-bottom: 1px solid var(--rule);
-    margin-bottom: 6px;
-  }
-  .cols .r {
-    text-align: right;
-  }
-  .row {
-    border-radius: 9px;
-    cursor: pointer;
-    outline: none;
-  }
-  .row:hover {
-    background: rgba(255, 255, 255, 0.028);
-  }
-  .row.sel {
-    background: var(--lift);
-  }
-  .r-main {
-    grid-area: main;
-    min-width: 0;
-  }
-  .r-name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    min-width: 0;
-  }
-  .r-name span {
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    align-self: center;
   }
-  .r-sub {
-    margin-top: 2px;
-    font: 12px var(--font-code);
+  .rec.on .t1 b {
+    align-self: baseline;
+  }
+  .missing .t1 b {
     color: var(--text-3);
+    text-decoration: line-through;
+  }
+  .sub {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .r-kind {
-    grid-area: kind;
-    font: 500 11px var(--font-code);
-    letter-spacing: 0.06em;
+    font: 12.5px var(--font-code);
     color: var(--text-3);
+    align-self: center;
   }
-  .r-n {
-    grid-area: n;
-    text-align: right;
-    font: 500 12.5px var(--font-code);
-    color: var(--text-2);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
+  .rec.on .sub {
+    align-self: baseline;
   }
-  .r-when {
-    grid-area: when;
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 2px;
-    font-size: 12px;
+  .when {
+    margin-left: auto;
+    flex: none;
     color: var(--text-3);
-    white-space: nowrap;
+    align-self: center;
+  }
+  .rec.on .when {
+    align-self: baseline;
   }
   .acts {
     display: none;
     gap: 2px;
+    align-self: center;
+    margin: -6px 0;
   }
-  .row:hover .t,
-  .row.sel .t,
-  .row.missing .t {
+  .rec:hover .acts {
+    display: flex;
+  }
+  .rec:hover .when {
     display: none;
   }
-  .row:hover .acts,
-  .row.sel .acts,
-  .row.missing .acts {
-    display: flex;
-  }
-  .ib {
-    width: 28px;
-    height: 28px;
-    display: grid;
-    place-items: center;
-    border-radius: 6px;
-    color: var(--text-2);
-  }
-  .tb {
-    height: 26px;
-    padding: 0 9px;
-    border-radius: 6px;
-    font-size: 12px;
-    color: var(--text-2);
-  }
-  .ib:hover,
-  .tb:hover {
-    background: var(--lift-2);
-    color: var(--text-hi);
-  }
-  .row.missing .r-name {
-    color: var(--text-2);
-  }
-  .row.missing .r-sub {
-    color: var(--obf);
-  }
-  .row.loading .r-sub {
-    color: var(--accent);
-  }
-  .none {
-    padding: 22px 0;
+  .facts {
+    margin-top: 4px;
     color: var(--text-3);
-  }
-  .sfoot {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 20px;
-    margin-top: 26px;
-    font-size: 12px;
-    color: var(--text-3);
+    gap: 0 14px;
   }
-  .keys {
-    display: inline-flex;
-    align-items: center;
+  .was {
+    color: var(--text-2);
   }
-  .keys .key {
-    margin-right: 6px;
-  }
-  .keys :global(svg.ti) {
-    margin: -1px 0;
-  }
-  .clr {
-    margin-left: auto;
-    color: var(--text-3);
-  }
-  .clr:hover {
+  .was code {
+    font-size: 13px;
+    font-weight: 500;
     color: var(--text-hi);
   }
-
-  /* fx */
-  .beam {
-    stroke-width: 1.6;
-    opacity: 0.7;
+  .more {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
   }
-  .work:has(.stage:hover) .beam,
-  .hot .beam {
-    opacity: 1;
+  .go {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
   }
-  .hot .beam {
-    stroke-width: 3;
+  .otab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 30px;
+    padding: 0 11px 0 8px;
+    border-radius: 8px;
+    background: var(--editor);
+    border: 1px solid var(--edge);
+    color: var(--text);
   }
-  .ray {
-    opacity: 0.8;
+  .otab:hover {
+    border-color: var(--gutter);
+    color: var(--text-hi);
   }
-  .blocked .prism {
-    opacity: 0.3;
+  .dim {
+    color: var(--text-3);
   }
-  .blocked .beam {
-    opacity: 0;
+  .bad {
+    color: var(--bad);
   }
-
-  @media (max-width: 1180px) {
-    .row,
-    .cols {
-      grid-template-columns: minmax(0, 1fr) 84px 96px;
-      grid-template-areas: "main n when";
-    }
-    .r-kind,
-    .cols .ck {
-      display: none;
-    }
-    .shelf {
-      padding-right: 36px;
-    }
+  .none {
+    margin: 0;
+    padding: 12px 14px;
+    color: var(--text-3);
+  }
+  .foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin-top: 20px;
+    padding: 0 14px;
+    color: var(--text-3);
+  }
+  .lnk {
+    color: var(--text-2);
+    text-decoration: underline;
+    text-decoration-color: var(--gutter);
+    text-underline-offset: 3px;
+  }
+  .lnk:hover {
+    color: var(--text-hi);
   }
 </style>

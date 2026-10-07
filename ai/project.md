@@ -32,8 +32,9 @@ src/                       src-tauri/src/                                engine/
 - **Frontend** (`src/`): `src/lib/engine.ts` holds typed wrappers for every
   command. `src/routes/+page.svelte` owns app state, menus, palette and the open
   flow; `src/lib/shell/` has the app bar, status bar, palette, context menu,
-  prompt and shortcut sheet; `src/lib/start/` the start screen and onboarding;
-  `src/lib/workbench/` everything after a file opens (below).
+  prompt and shortcut sheet; `src/lib/start/` the home screen and onboarding;
+  `src/lib/workbench/` everything after a file opens (below). `src/lib/theme.svelte.ts`
+  switches the colour theme (Graphite, Indigo, Paper; View menu).
 - **Bundled runtime**: `pnpm engine` builds a fat jar and a jlink-trimmed
   JRE into `src-tauri/engine-dist/` (gitignored). Tauri bundles it as the
   `engine/` resource. Users never need Java.
@@ -50,11 +51,13 @@ src/                       src-tauri/src/                                engine/
 | `src-tauri/src/engine/` | `mod.rs` (Engine, sessions, code-data replay), `process.rs` (one JVM, routing), `locate.rs`, `tests.rs` |
 | `src/lib/workbench/workspace.svelte.ts` | One open file: tabs, document cache, history, usages, notes, saving |
 | `src/lib/workbench/doc.ts` | Source text model: tokens, links per line, declaration index; Java, smali/bytecode, XML, plain, hex |
-| `src/lib/workbench/CodeView.svelte` | Virtualized code view: caret, links, occurrences, find in class |
-| `src/lib/workbench/Workbench.svelte` | The shell: sidebar modes, tabs, editor, outline, usages, keys, menus |
-| `src/lib/workbench/*Panel.svelte`, `OverviewPage.svelte`, `ClassTree.svelte` | Search, usages, notes, files, overview, class tree |
+| `src/lib/workbench/CodeView.svelte` | Virtualized code view: caret, links, occurrences, find in class, your comments as notes, method band, scrollbar marks |
+| `src/lib/workbench/Workbench.svelte` | The layout: panel rail, side panel, tabs, editor, inspector, usages, keys, menus |
+| `src/lib/workbench/Inspector.svelte` | Right panel: what's under the caret, live usages, calls, your notes, Frida hook |
+| `src/lib/workbench/*Panel.svelte`, `OverviewPage.svelte`, `ClassTree.svelte` | Search, usages, notes, files, overview (with class map), class tree (libraries grouped, members of the open class) |
 | `src/lib/workbench/android.ts`, `frida.ts`, `tree.ts` | Library prefixes and permission levels, Frida snippets, tree building |
-| `design/DESIGN.md`, `design/mockup.html` | The target UI, spec and full HTML mockup. **Local only**, see gotchas. |
+| `design/workbench-v5.html` | The approved UI (2026-10-06), a clickable mockup; v2 to v4 are the rounds before it. **Local only**, see gotchas. |
+| `design/DESIGN.md`, `design/mockup.html` | The first UI spec and mockup; v5 supersedes its looks, its interaction rules still hold. **Local only.** |
 | `brand/BRAND.md` | Logo, colours, type. **Local only.** |
 
 ## Stack versions

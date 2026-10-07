@@ -1,6 +1,6 @@
 # Status
 
-_Last verified: 2026-10-03_
+_Last verified: 2026-10-05_
 
 ## Works
 
@@ -26,8 +26,8 @@ _Last verified: 2026-10-03_
 - Engine crash recovery: pending requests fail, the next request restarts the JVM, reopens the
   file and re-applies renames.
 - Tests green as of 2026-10-03: engine 25 (incl. smoke on the jlink runtime), Rust 16,
-  frontend 25, `pnpm check` 0 errors, clippy clean. CI workflow in `.github/workflows/ci.yml`
-  (runs on pushes to `master` and on pull requests, so not yet on this branch).
+  frontend 25, `pnpm check` 0 errors, clippy clean. CI (`.github/workflows/ci.yml`, ubuntu only)
+  ran green on `master` for the first time on 2026-10-03.
 - Checked against a real APK (F-Droid 1.21, 10,166 classes): opens in ~6 s, overview, files,
   usages; a cold code search decompiles everything in ~20 s, later ones are fast.
 - Checked in the real Tauri window under Xvfb (2026-10-03): onboarding, open, decompile, usages,
@@ -43,11 +43,22 @@ _Last verified: 2026-10-03_
 
 ## Design
 
-- Start screen: implemented in `src/lib/start/` from `design/start-mockup.html` (2026-10-01).
-- Workbench: built without the local `design/mockup.html` (not in this clone), following the
-  start screen's look and the UI taste notes in conventions.md. Compare with the mockup when it's
-  available and adjust on purpose.
+- 2026-10-06: the whole UI rebuilt to the approved `design/workbench-v5.html` (branch `ui-redesign`):
+  panel islands on a dark frame, panel rail, breadcrumb in the title bar, Inspector replacing the
+  Outline, comments as notes in the code, scrollbar marks, class map on the Overview, a quiet home
+  screen (no prism stage), three themes. Checked by screenshot (real engine, headless Chromium) on the
+  example JAR and a 3,000-class APK; not yet in the real Tauri window.
+
+## Not release-ready (2026-10-05)
+
+The owner calls it "usable-ish, not ready for release". Gaps found on 2026-10-05:
+- No `LICENSE` and no third-party `NOTICE` (jadx, Vineflower and the bundled JRE all ship with it).
+- Linux only: never run on Windows or macOS, and CI builds only on ubuntu. No `tauri build`
+  artifacts, signing or updater.
+- Engine JVM has no `-Xmx`, so the JVM picks its default heap size. Big APKs (40k+ classes) are untested.
+- No settings (font size, theme, decompiler options). App icons in `src-tauri/icons/` are the brand ones.
 
 ## Repo state
 
-Work from 2026-10-03 is pushed to branch `claude/sharp-mendel-qbctaf`, not merged to `master`.
+`master` = `origin/master` at `d024152`. The 2026-10-03 branch `claude/sharp-mendel-qbctaf` was
+fast-forwarded into it.

@@ -76,11 +76,9 @@
     left: 50%;
     transform: translateX(-50%);
     width: min(520px, calc(100% - 32px));
-    background: #16181a;
+    background: var(--raised);
     border-radius: 10px;
-    box-shadow:
-      0 0 0 1px #2b2f32,
-      0 24px 60px rgba(0, 0, 0, 0.65);
+    box-shadow: var(--shadow);
     overflow: hidden;
   }
   .title {
@@ -94,7 +92,7 @@
     width: 100%;
     padding: 8px 18px 12px;
     border: 0;
-    border-bottom: 1px solid var(--rule);
+    border-bottom: 1px solid var(--line);
     background: transparent;
     font: 15px var(--font-code);
     color: var(--text-hi);
@@ -113,7 +111,7 @@
     color: var(--text-3);
   }
   .err {
-    color: var(--error);
+    color: var(--bad);
   }
   .keys {
     margin-left: auto;

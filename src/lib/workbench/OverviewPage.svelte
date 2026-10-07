@@ -2,10 +2,9 @@
   // The first tab: what this file is, what stands out, and where to start reading.
   import type { Cert, Component } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
-  import Dots from "$lib/Dots.svelte";
   import { fmtN, fmtSize, kindLabel, tildify } from "$lib/format";
   import { say } from "$lib/status.svelte";
-  import { androidVersion, groupClasses, permissionLabel, permissionLevel, type PermissionLevel } from "./android";
+  import { androidVersion, groupClasses, libraryOf, looksObfuscated, permissionLabel, permissionLevel, type PermissionLevel } from "./android";
   import { dotted, type Workspace } from "./workspace.svelte";
 
   interface Props {
@@ -20,18 +19,47 @@
   let { ws, home, onfilter, onreopen }: Props = $props();
 
   const COMPONENTS_SHOWN = 8;
-  const GROUPS_SHOWN = 10;
+  const LIBS_SHOWN = 8;
 
   let allComponents = $state(false);
   let allPermissions = $state(false);
-  let allGroups = $state(false);
+  let allLibs = $state(false);
   let allLinks = $state(false);
 
   const o = $derived(ws.info);
   const a = $derived(o?.android);
   const makeup = $derived(groupClasses(ws.classes, a?.package));
-  const biggest = $derived(makeup.groups[0]?.classes ?? 1);
-  const libraryShare = $derived(makeup.groups.filter((g) => g.library).reduce((n, g) => n + g.classes, 0) / Math.max(1, ws.classes.length));
+  const libraries = $derived(makeup.groups.filter((g) => g.library));
+
+  /** The class map: the app's own code, its obfuscated part, the Kotlin runtime, everything else known. */
+  const map = $derived.by(() => {
+    const parts = {
+      app: { label: "App code", n: 0, color: "var(--m-app)", prefix: "" },
+      obf: { label: "Obfuscated", n: 0, color: "var(--m-obf)", prefix: "" },
+      kt: { label: "Kotlin runtime", n: 0, color: "var(--m-kt)", prefix: "kotlin" },
+      lib: { label: "Libraries", n: 0, color: "var(--m-lib)", prefix: "" },
+    };
+    const obfPkgs = new Map<string, number>();
+    for (const c of ws.classes) {
+      const lib = libraryOf(c.id);
+      if (lib) (lib.startsWith("Kotlin") ? parts.kt : parts.lib).n++;
+      else if (looksObfuscated(c.id)) {
+        parts.obf.n++;
+        const pkg = c.id.slice(0, Math.max(0, c.id.lastIndexOf("/")));
+        obfPkgs.set(pkg, (obfPkgs.get(pkg) ?? 0) + 1);
+      } else parts.app.n++;
+    }
+    parts.app.prefix = a?.package ?? makeup.groups.find((g) => !g.library)?.prefix.replaceAll("/", ".") ?? "";
+    parts.obf.prefix = [...obfPkgs.entries()].sort((x, y) => y[1] - x[1])[0]?.[0].replaceAll("/", ".") ?? "";
+    const list = Object.values(parts).filter((p) => p.n > 0);
+    // Widths with a floor, so a small part stays visible and clickable.
+    const floor = list.map((p) => Math.max(p.n / Math.max(1, ws.classes.length), 0.04));
+    const sum = floor.reduce((x, y) => x + y, 0);
+    return list.map((p, i) => ({ ...p, w: floor[i] / sum }));
+  });
+
+  const iconFor = $derived(ws.opened.kind === "apk" || ws.opened.kind === "aab" ? "android" : ws.opened.kind === "dex" ? "fileCode" : "coffee");
+  const title = $derived(a?.label && !a.label.startsWith("@") ? a.label : ws.name);
 
   const LEVEL_ORDER: Record<PermissionLevel, number> = { dangerous: 0, special: 1, custom: 2, normal: 3 };
   const permissions = $derived(
@@ -125,54 +153,83 @@
 
 <div class="page selectable">
   <div class="in">
-    <header>
-      <h1>{a?.label && !a.label.startsWith("@") ? a.label : ws.name}</h1>
-      <p class="path" title={ws.path}>{tildify(ws.path, home)}</p>
-      <p class="facts">
-        <Dots
-          parts={[
-            kindLabel(ws.opened.kind),
-            o && fmtSize(o.size),
-            `${fmtN(ws.classes.length)} classes`,
-            o && `${fmtN(o.methods)} methods`,
-            o && `${fmtN(o.fields)} fields`,
-          ]}
-        />
-      </p>
+    <header class="ident">
+      <span class="appicon"><Icon name={iconFor} size={26} /></span>
+      <div class="who">
+        <h1>{title}</h1>
+        {#if a?.package}<p class="pk">{a.package}</p>{:else}<p class="pk" title={ws.path}>{tildify(ws.path, home)}</p>{/if}
+      </div>
+      <dl class="facts">
+        {#if a?.versionName || a?.versionCode}
+          <div><dt>Version</dt><dd>{a.versionName ?? ""}{#if a.versionCode}{" "}<span class="dim">({a.versionCode})</span>{/if}</dd></div>
+        {/if}
+        {#if a?.minSdk || a?.targetSdk}
+          <div><dt>SDK</dt><dd>{a.minSdk ?? "?"} to {a.targetSdk ?? "?"}</dd></div>
+        {:else}
+          <div><dt>Type</dt><dd>{kindLabel(ws.opened.kind)}</dd></div>
+        {/if}
+        {#if o}<div><dt>Size</dt><dd>{fmtSize(o.size)}</dd></div>{/if}
+        <div><dt>Classes</dt><dd>{fmtN(ws.classes.length)}</dd></div>
+        {#if o && !a}<div><dt>Methods</dt><dd>{fmtN(o.methods)}</dd></div>{/if}
+      </dl>
     </header>
+
+    {#if map.length > 1}
+      <section class="map" aria-label="Class map">
+        <div class="map-head"><h2>Class map</h2><span>Click a part to show it in the class tree</span></div>
+        <div class="bar">
+          {#each map as p (p.label)}
+            <button style:flex={p.w} style:background={p.color} title="{p.label}: {fmtN(p.n)} classes" disabled={!p.prefix} onclick={() => onfilter(p.prefix)}></button>
+          {/each}
+        </div>
+        <div class="legend">
+          {#each map as p (p.label)}
+            <button disabled={!p.prefix} onclick={() => onfilter(p.prefix)}><i style:background={p.color}></i>{p.label}<b>{fmtN(p.n)}</b></button>
+          {/each}
+        </div>
+        {#if libraries.length}
+          <p class="libs">
+            <span class="dim">Libraries found</span>
+            {#each allLibs ? libraries : libraries.slice(0, LIBS_SHOWN) as g, i (g.name)}{#if i}{", "}{/if}<button class="lib" onclick={() => g.prefix && onfilter(dotted(g.prefix))}>{g.name}</button>{" "}<span class="dim">{fmtN(g.classes)}</span>{/each}
+            {#if libraries.length > LIBS_SHOWN}{" "}<button class="more" onclick={() => (allLibs = !allLibs)}>{allLibs ? "fewer" : `and ${libraries.length - LIBS_SHOWN} more`}</button>{/if}
+          </p>
+        {/if}
+      </section>
+    {/if}
 
     {#if !o}
       <p class="wait">
         {#if ws.infoError}Couldn't read the file's details: {ws.infoError}{:else}<i class="spin"></i>Reading the file{/if}
       </p>
     {:else}
-      {#if findings.length}
-        <section class="findings" aria-label="Worth a look">
-          {#each findings as f (f.title)}
-            <div class="finding {f.level}">
-              <Icon name="alert" size={15} />
-              <div><strong>{f.title}</strong><span>{f.text}</span></div>
-              {#if f.action}<button class="fact" onclick={f.action.run}>{f.action.label}</button>{/if}
-            </div>
-          {/each}
-        </section>
-      {/if}
-
       <div class="grid">
+        {#if findings.length}
+          <section>
+            <h2>Worth a look <span class="n">{findings.length}</span></h2>
+            {#each findings as f (f.title)}
+              <div class="finding {f.level}">
+                <Icon name={f.level === "info" ? "info" : "alert"} size={17} />
+                <div><b>{f.title}</b><p>{f.text}</p></div>
+                {#if f.action}<button class="more" onclick={f.action.run}>{f.action.label}</button>{/if}
+              </div>
+            {/each}
+          </section>
+        {/if}
+
         {#if a}
           <section>
             <h2>App</h2>
-            <dl>
+            <dl class="kv">
               <dt>Package</dt>
               <dd class="mono">{a.package}</dd>
               {#if a.versionName || a.versionCode}
                 <dt>Version</dt>
-                <dd>{a.versionName ?? ""}{#if a.versionCode}<span class="dim"> build {a.versionCode}</span>{/if}</dd>
+                <dd>{a.versionName ?? ""}{#if a.versionCode}<span class="dim">build {a.versionCode}</span>{/if}</dd>
               {/if}
               {#each [["Min SDK", a.minSdk], ["Target SDK", a.targetSdk], ["Compile SDK", a.compileSdk]] as [label, sdk] (label)}
                 {#if sdk}
                   <dt>{label}</dt>
-                  <dd>{sdk}{#if androidVersion(sdk)}<span class="dim"> {androidVersion(sdk)}</span>{/if}</dd>
+                  <dd>{sdk}{#if androidVersion(sdk)}<span class="dim">{androidVersion(sdk)}</span>{/if}</dd>
                 {/if}
               {/each}
               {#if a.application}
@@ -187,7 +244,7 @@
               {/if}
             </dl>
             {#if o.manifest}
-              <button class="act" onclick={() => ws.showManifest()}>Open AndroidManifest.xml</button>
+              <button class="more" onclick={() => ws.showManifest()}>Open AndroidManifest.xml</button>
             {/if}
           </section>
         {/if}
@@ -195,7 +252,7 @@
         {#if o.jarManifest || o.javaVersions?.length}
           <section>
             <h2>Java</h2>
-            <dl>
+            <dl class="kv">
               {#if mainClass}
                 <dt>Main class</dt>
                 <dd class="mono">{#if has(mainClass)}<button class="cl" onclick={() => open(mainClass)}>{mainClass}</button>{:else}{mainClass}{/if}</dd>
@@ -209,7 +266,7 @@
               {#if o.javaVersions?.length}
                 <dt>Bytecode</dt>
                 <dd>
-                  {#each o.javaVersions as v, i (v.java)}{#if i}, {/if}Java {v.java}{#if o.javaVersions.length > 1}<span class="dim"> {fmtN(v.classes)}</span>{/if}{/each}
+                  {#each o.javaVersions as v, i (v.java)}{#if i}, {/if}Java {v.java}{#if o.javaVersions.length > 1}<span class="dim">{fmtN(v.classes)}</span>{/if}{/each}
                 </dd>
               {/if}
               {#each [["Title", "Implementation-Title"], ["Version", "Implementation-Version"], ["Vendor", "Implementation-Vendor"], ["Module", "Automatic-Module-Name"], ["Built with", "Build-Jdk-Spec"], ["Created by", "Created-By"]] as [label, key] (key)}
@@ -224,23 +281,16 @@
 
         {#if a}
           <section>
-            <h2>Exported components <span class="n">{components.length}</span></h2>
+            <h2>Entry points <span class="n">{components.length}</span><span class="r">exported and launcher components</span></h2>
             {#if components.length}
-              <ul class="comps">
-                {#each allComponents ? components : components.slice(0, COMPONENTS_SHOWN) as c (c.type + c.name + (c.alias ?? ""))}
-                  <li>
-                    <span class="ctype">{typeLabel[c.type]}</span>
-                    <span class="cname mono">
-                      {#if has(c.name)}<button class="cl" onclick={() => open(c.name)}>{short(c.name)}</button>{:else}{short(c.name)}{/if}
-                    </span>
-                    <span class="tags">
-                      {#if c.launcher}<span class="tag">launcher</span>{/if}
-                      {#if c.exportedImplicitly}<span class="tag warn">implicit</span>{/if}
-                      {#if c.permission}<span class="tag" title={c.permission}>needs permission</span>{/if}
-                    </span>
-                  </li>
-                {/each}
-              </ul>
+              {#each allComponents ? components : components.slice(0, COMPONENTS_SHOWN) as c (c.type + c.name + (c.alias ?? ""))}
+                <div class="tr">
+                  <span class="a mono">{#if has(c.name)}<button class="cl" onclick={() => open(c.name)}>{short(c.name)}</button>{:else}{short(c.name)}{/if}</span>
+                  {#if c.exportedImplicitly}<span class="flag warn">implicitly exported</span>{:else if c.exported && !c.launcher && !c.permission}<span class="flag bad">exported</span>{/if}
+                  {#if c.permission}<span class="flag" title={c.permission}>needs permission</span>{/if}
+                  <span class="b">{typeLabel[c.type].toLowerCase()}{c.launcher ? ", launcher" : ""}</span>
+                </div>
+              {/each}
               {#if components.length > COMPONENTS_SHOWN}
                 <button class="more" onclick={() => (allComponents = !allComponents)}>{allComponents ? "Show fewer" : `Show all ${components.length}`}</button>
               {/if}
@@ -249,9 +299,7 @@
             {/if}
             {#if deepLinks.length}
               <h3>Deep links <span class="n">{deepLinks.length}</span></h3>
-              <ul class="links mono">
-                {#each allLinks ? deepLinks : deepLinks.slice(0, 8) as l (l)}<li>{l}</li>{/each}
-              </ul>
+              {#each allLinks ? deepLinks : deepLinks.slice(0, 8) as l (l)}<div class="tr"><span class="a mono">{l}</span></div>{/each}
               {#if deepLinks.length > 8}
                 <button class="more" onclick={() => (allLinks = !allLinks)}>{allLinks ? "Show fewer" : `Show all ${deepLinks.length}`}</button>
               {/if}
@@ -261,18 +309,16 @@
           <section>
             <h2>
               Permissions <span class="n">{permissions.length}</span>
-              {#if dangerousCount}<span class="sub">{dangerousCount} dangerous</span>{/if}
+              {#if dangerousCount}<span class="r">{dangerousCount} dangerous</span>{/if}
             </h2>
             {#if permissions.length}
-              <ul class="perms">
-                {#each allPermissions ? permissions : permissions.slice(0, 12) as p (p.name)}
-                  <li class={p.level}>
-                    <span class="mono pname" title={p.name}>{permissionLabel(p.name)}</span>
-                    {#if p.level === "dangerous" || p.level === "special"}<span class="lvl">{p.level}</span>{/if}
-                    {#if p.maxSdk}<span class="dim">up to SDK {p.maxSdk}</span>{/if}
-                  </li>
-                {/each}
-              </ul>
+              {#each allPermissions ? permissions : permissions.slice(0, 12) as p (p.name)}
+                <div class="tr">
+                  <span class="a mono" class:hi={p.level === "dangerous" || p.level === "special"} title={p.name}>{permissionLabel(p.name)}</span>
+                  {#if p.maxSdk}<span class="dim">up to SDK {p.maxSdk}</span>{/if}
+                  <span class="b" class:warn={p.level === "dangerous"} class:bad={p.level === "special"}>{p.level}</span>
+                </div>
+              {/each}
               {#if permissions.length > 12}
                 <button class="more" onclick={() => (allPermissions = !allPermissions)}>{allPermissions ? "Show fewer" : `Show all ${permissions.length}`}</button>
               {/if}
@@ -282,31 +328,14 @@
           </section>
         {/if}
 
-        <section class="wide">
-          <h2>Code {#if libraryShare >= 0.01}<span class="sub">{Math.round(libraryShare * 100)}% known libraries</span>{/if}</h2>
-          <div class="groups">
-            {#each allGroups ? makeup.groups : makeup.groups.slice(0, GROUPS_SHOWN) as g (g.name)}
-              <button class="group" onclick={() => g.prefix && onfilter(dotted(g.prefix))} title={g.prefix ? `Show ${dotted(g.prefix)} in the class list` : ""}>
-                <span class="gname" class:lib={g.library}>{g.name}</span>
-                <span class="gkind">{g.library ? "library" : ""}</span>
-                <span class="bar"><i class:lib={g.library} style:width="{Math.max(1, (g.classes / biggest) * 100)}%"></i></span>
-                <span class="gn">{fmtN(g.classes)}</span>
-              </button>
-            {/each}
-          </div>
-          {#if makeup.groups.length > GROUPS_SHOWN}
-            <button class="more" onclick={() => (allGroups = !allGroups)}>{allGroups ? "Show fewer" : `Show all ${makeup.groups.length} groups`}</button>
-          {/if}
-        </section>
-
         {#if o.signing && (o.signing.schemes.length || o.kind === "apk")}
           <section>
-            <h2>Signing {#if o.signing.schemes.length}<span class="sub">{o.signing.schemes.join(", ")}</span>{/if}</h2>
+            <h2>Signing {#if o.signing.schemes.length}<span class="n">{o.signing.schemes.join(", ")}</span>{/if}<span class="r">read, not verified</span></h2>
             {#if !certs.length}
               <p class="dim">Not signed.</p>
             {/if}
             {#each certs as c (c.sha256)}
-              <dl>
+              <dl class="kv">
                 <dt>Signer</dt>
                 <dd title={c.subject}>{cn(c.subject)}</dd>
                 {#if c.issuer !== c.subject}
@@ -314,9 +343,9 @@
                   <dd title={c.issuer}>{cn(c.issuer)}</dd>
                 {/if}
                 <dt>Valid</dt>
-                <dd class:expired={expired(c)}>{date(c.notBefore)} to {date(c.notAfter)}{#if expired(c)} (expired){/if}</dd>
+                <dd class:warn={expired(c)}>{date(c.notBefore)} to {date(c.notAfter)}{#if expired(c)} (expired){/if}</dd>
                 <dt>Key</dt>
-                <dd>{c.key}<span class="dim"> {c.algorithm}</span></dd>
+                <dd>{c.key}<span class="dim">{c.algorithm}</span></dd>
                 <dt>SHA-256</dt>
                 <dd class="mono hash">
                   <span>{c.sha256}</span>
@@ -329,15 +358,15 @@
 
         {#if libsByAbi.length || (o.dex?.length ?? 0) > 0}
           <section>
-            <h2>Contents {#if o.files}<span class="sub">{fmtN(o.files)} files</span>{/if}</h2>
-            <dl>
+            <h2>Contents {#if o.files}<span class="n">{fmtN(o.files)} files</span>{/if}</h2>
+            <dl class="kv">
               {#if o.dex?.length}
                 <dt>DEX</dt>
-                <dd>{o.dex.length === 1 ? "1 file" : `${o.dex.length} files`}<span class="dim"> {fmtSize(o.dex.reduce((n, d) => n + d.size, 0))}</span></dd>
+                <dd>{o.dex.length === 1 ? "1 file" : `${o.dex.length} files`}<span class="dim">{fmtSize(o.dex.reduce((n, d) => n + d.size, 0))}</span></dd>
               {/if}
               {#each libsByAbi as [abi, names] (abi)}
                 <dt class="mono">{abi}</dt>
-                <dd class="mono libs">{names.join(", ")}</dd>
+                <dd class="mono libs2">{names.join(", ")}</dd>
               {/each}
             </dl>
             {#if !libsByAbi.length}<p class="dim">No native libraries.</p>{/if}
@@ -353,325 +382,327 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-    background: var(--pane);
   }
   .in {
-    max-width: 1080px;
-    padding: 40px 48px 64px;
+    max-width: 1100px;
+    padding: 32px 40px 64px;
   }
-  header h1 {
-    margin: 0;
-    font: 600 26px/1.15 var(--font-ui);
-    letter-spacing: -0.02em;
+  .ident {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding-bottom: 30px;
+  }
+  .appicon {
+    width: 54px;
+    height: 54px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    color: var(--ok);
+    background: color-mix(in srgb, var(--ok) 15%, var(--panel));
+  }
+  .who {
+    min-width: 0;
+  }
+  h1 {
+    margin: 0 0 4px;
+    font: 600 24px/1.2 var(--font-ui);
+    letter-spacing: -0.01em;
     color: var(--text-hi);
     overflow-wrap: anywhere;
   }
-  .path {
-    margin: 6px 0 0;
-    font: 12px var(--font-code);
-    color: var(--text-3);
+  .pk {
+    margin: 0;
+    font: 13px var(--font-code);
+    color: var(--text-2);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .facts {
-    margin: 10px 0 0;
-    font-size: 13px;
-    color: var(--text-2);
+    display: flex;
+    gap: 30px;
+    margin: 0 0 0 auto;
+  }
+  .facts div {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .facts dt {
+    font-size: 12.5px;
+    color: var(--text-3);
+  }
+  .facts dd {
+    margin: 0;
+    font: 600 15px var(--font-ui);
+    color: var(--text);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
   .wait {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 32px 0;
+    margin: 12px 0;
     color: var(--text-3);
   }
 
-  .findings {
+  .map {
+    margin-bottom: 36px;
+  }
+  .map-head {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-top: 28px;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .map-head h2 {
+    margin: 0;
+    padding: 0;
+  }
+  .map-head span {
+    color: var(--text-3);
+  }
+  .bar {
+    display: flex;
+    gap: 3px;
+    height: 26px;
+  }
+  .bar button {
+    min-width: 6px;
+    border-radius: 6px;
+  }
+  .bar button:hover:not(:disabled) {
+    filter: brightness(1.12);
+  }
+  .bar button:disabled {
+    cursor: default;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    margin-top: 14px;
+  }
+  .legend button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-2);
+  }
+  .legend button:hover:not(:disabled) {
+    color: var(--text-hi);
+  }
+  .legend button:disabled {
+    cursor: default;
+  }
+  .legend i {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+  }
+  .legend b {
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .libs {
+    margin: 14px 0 0;
+    color: var(--text-2);
+    line-height: 1.7;
+  }
+  .libs > .dim:first-child {
+    margin-right: 8px;
+  }
+  .lib {
+    color: var(--text);
+  }
+  .lib:hover {
+    color: var(--text-hi);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 34px 44px;
+  }
+  h2 {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 6px;
+    padding-bottom: 8px;
+    font: 600 15px var(--font-ui);
+    color: var(--text-hi);
+  }
+  h2 .n {
+    font-weight: 400;
+    font-size: 13.5px;
+    color: var(--text-3);
+  }
+  h2 .r {
+    margin-left: auto;
+    font-weight: 400;
+    font-size: 12.5px;
+    color: var(--text-3);
+  }
+  h3 {
+    margin: 18px 0 6px;
+    font: 600 13.5px var(--font-ui);
+    color: var(--text-2);
+  }
+  h3 .n {
+    font-weight: 400;
+    color: var(--text-3);
   }
   .finding {
     display: flex;
-    gap: 12px;
     align-items: flex-start;
-    padding: 10px 14px;
-    border-radius: 8px;
-    background: var(--shelf);
+    gap: 12px;
+    padding: 11px 0;
+    border-top: 1px solid var(--line);
     color: var(--text-3);
   }
   .finding :global(svg) {
     margin-top: 2px;
   }
+  .finding.error :global(svg) {
+    color: var(--bad);
+  }
+  .finding.warn :global(svg) {
+    color: var(--warn);
+  }
+  .finding.info :global(svg) {
+    color: var(--accent);
+  }
   .finding div {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2px 12px;
+    flex: 1;
+    min-width: 0;
   }
-  .finding strong {
+  .finding b {
     font-weight: 600;
+    color: var(--text);
   }
-  .finding span {
+  .finding p {
+    margin: 3px 0 0;
     color: var(--text-2);
   }
-  .finding.error {
-    color: var(--error);
-  }
-  .finding.warn {
-    color: var(--obf);
-  }
-  .finding.info strong {
-    color: var(--text-hi);
-  }
-  .fact {
-    margin-left: auto;
+  .finding .more {
+    margin: 2px 0 0;
     flex: none;
-    font-size: 12.5px;
-    color: var(--text-2);
-    text-decoration: underline;
-    text-decoration-color: #3c4246;
-    text-underline-offset: 3px;
   }
-  .fact:hover {
-    color: var(--text-hi);
-  }
-
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-    gap: 36px 56px;
-    margin-top: 36px;
-  }
-  section.wide {
-    grid-column: 1 / -1;
-  }
-  h2 {
+  .tr {
     display: flex;
     align-items: baseline;
-    gap: 10px;
-    margin: 0 0 12px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--line);
-    font: 600 14px var(--font-ui);
-    color: var(--text-hi);
+    gap: 12px;
+    padding: 7px 0;
+    border-top: 1px solid var(--line);
   }
-  h3 {
-    margin: 20px 0 8px;
-    font: 600 12.5px var(--font-ui);
+  .tr .a {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--text-2);
   }
-  h2 .n,
-  h3 .n {
-    font: 12px var(--font-code);
+  .tr .a.hi {
+    color: var(--text-hi);
+  }
+  .tr .b {
+    margin-left: auto;
+    flex: none;
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+  .flag {
+    flex: none;
+    font-weight: 600;
+    font-size: 12.5px;
     color: var(--text-3);
   }
-  h2 .sub {
-    font: 400 12.5px var(--font-ui);
-    color: var(--text-3);
+  .flag.bad,
+  .b.bad {
+    color: var(--bad) !important;
   }
-  dl {
+  .flag.warn,
+  .b.warn,
+  dd.warn {
+    color: var(--warn) !important;
+  }
+  .kv {
     display: grid;
     grid-template-columns: 120px minmax(0, 1fr);
-    gap: 7px 16px;
-    margin: 0 0 14px;
-    font-size: 13px;
+    margin: 0 0 12px;
   }
-  dt {
+  .kv dt,
+  .kv dd {
+    padding: 7px 0;
+    border-top: 1px solid var(--line);
+  }
+  .kv dt {
     color: var(--text-3);
   }
-  dd {
+  .kv dd {
     margin: 0;
-    color: var(--text);
     min-width: 0;
+    color: var(--text);
     overflow-wrap: anywhere;
   }
   .mono {
     font-family: var(--font-code);
-    font-size: 12.5px;
+    font-size: 13px;
   }
   .dim {
     color: var(--text-3);
   }
   /* Svelte trims the leading space inside these spans, so space them here. */
   dd .dim {
-    margin-left: 0.4em;
+    margin-left: 0.45em;
   }
   p.dim {
     margin: 0;
-    font-size: 13px;
-  }
-  .expired {
-    color: var(--obf);
+    padding: 7px 0;
+    border-top: 1px solid var(--line);
   }
   .hash {
     display: flex;
     align-items: flex-start;
     gap: 6px;
-    font-size: 11.5px;
+    font-size: 12px;
     line-height: 1.5;
     color: var(--text-2);
   }
-  .libs {
+  .hash .ib {
+    width: 24px;
+    height: 24px;
+  }
+  .libs2 {
     color: var(--text-2);
   }
   .cl {
     color: var(--text-hi);
     text-align: left;
     text-decoration: underline;
-    text-decoration-color: #4b5156;
+    text-decoration-color: var(--gutter);
     text-underline-offset: 3px;
     overflow-wrap: anywhere;
   }
   .cl:hover {
     text-decoration-color: var(--accent);
   }
-  .act,
   .more {
-    margin-top: 4px;
-    font-size: 12.5px;
+    margin-top: 6px;
     color: var(--text-2);
     text-decoration: underline;
-    text-decoration-color: #3c4246;
+    text-decoration-color: var(--gutter);
     text-underline-offset: 3px;
   }
-  .act:hover,
   .more:hover {
     color: var(--text-hi);
-  }
-  .ib {
-    flex: none;
-    display: grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 5px;
-    color: var(--text-3);
-  }
-  .ib:hover {
-    background: var(--lift-2);
-    color: var(--text-hi);
-  }
-
-  ul {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .comps li {
-    display: grid;
-    grid-template-columns: 70px minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: baseline;
-    padding: 4px 0;
-    font-size: 13px;
-  }
-  .ctype {
-    color: var(--text-3);
-    font-size: 12px;
-  }
-  .cname {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-  .tags {
-    display: flex;
-    gap: 6px;
-  }
-  .tag {
-    font-size: 11.5px;
-    color: var(--text-3);
-  }
-  .tag.warn {
-    color: var(--obf);
-  }
-  .links li {
-    padding: 2px 0;
-    color: var(--text-2);
-    overflow-wrap: anywhere;
-  }
-  .perms li {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    padding: 3px 0;
-    font-size: 13px;
-  }
-  .pname {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--text-2);
-  }
-  .perms .dangerous .pname,
-  .perms .special .pname {
-    color: var(--text-hi);
-  }
-  .lvl {
-    font-size: 11.5px;
-  }
-  .dangerous .lvl {
-    color: var(--obf);
-  }
-  .special .lvl {
-    color: var(--error);
-  }
-
-  .groups {
-    display: flex;
-    flex-direction: column;
-  }
-  .group {
-    display: grid;
-    grid-template-columns: minmax(180px, 300px) 64px minmax(0, 1fr) 64px;
-    gap: 16px;
-    align-items: center;
-    padding: 5px 8px;
-    margin: 0 -8px;
-    border-radius: 6px;
-    text-align: left;
-    font-size: 13px;
-  }
-  .group:hover {
-    background: var(--shelf);
-  }
-  .gname {
-    font-family: var(--font-code);
-    font-size: 12.5px;
-    color: var(--text-hi);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .gname.lib {
-    font-family: var(--font-ui);
-    font-size: 13px;
-    color: var(--text-2);
-  }
-  .gkind {
-    font-size: 11.5px;
-    color: var(--text-3);
-  }
-  .bar {
-    height: 6px;
-    border-radius: 3px;
-    background: var(--line);
-    overflow: hidden;
-  }
-  .bar i {
-    display: block;
-    height: 100%;
-    border-radius: 3px;
-    background: var(--c-type);
-  }
-  .bar i.lib {
-    background: var(--gutter);
-  }
-  .gn {
-    text-align: right;
-    font: 12px var(--font-code);
-    color: var(--text-2);
   }
 </style>

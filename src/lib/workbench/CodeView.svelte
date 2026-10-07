@@ -32,9 +32,30 @@
     seen?: number;
     onscrolled?: (top: number) => void;
     onrevealed?: (n: number) => void;
+    /** Your comments, one entry per line of text; jadx prints them as `// text` lines. */
+    notes?: Set<string>;
+    /** Whether a node has a name you gave it. */
+    renamed?: (id: string) => boolean;
+    /** Bookmarked lines. */
+    bookmarks?: number[];
   }
 
-  let { doc, caret, reveal, fontSize, onfollow, oncaret, oncontext, top: savedTop, seen, onscrolled, onrevealed }: Props = $props();
+  let {
+    doc,
+    caret,
+    reveal,
+    fontSize,
+    onfollow,
+    oncaret,
+    oncontext,
+    top: savedTop,
+    seen,
+    onscrolled,
+    onrevealed,
+    notes,
+    renamed,
+    bookmarks = [],
+  }: Props = $props();
 
   const OVERSCAN = 30;
   const PAD = 16;
@@ -45,7 +66,7 @@
   let height = $state(600);
   let marked = $state<number | null>(null);
 
-  const lh = $derived(Math.round(fontSize * 1.62));
+  const lh = $derived(Math.round(fontSize * 1.7));
   const digits = $derived(String(doc.lines.length).length);
   // A hex dump carries its own offsets; line numbers would only repeat them.
   const numbered = $derived(doc.engine !== "hex");
@@ -82,7 +103,74 @@
     return !!focus.word && s.text === focus.word && s.kind !== "c" && s.kind !== "s" && s.kind !== "k";
   }
 
+  /** Lines that are one of your comments, with whether the line above and below are too. */
+  const noteLines = $derived.by(() => {
+    const out = new Map<number, { text: string; indent: number }>();
+    if (!notes?.size) return out;
+    doc.lines.forEach((l, i) => {
+      const m = /^(\s*)\/\/ ?(.*)$/.exec(l);
+      if (m && notes.has(m[2].trim())) out.set(i, { text: m[2], indent: m[1].length });
+    });
+    return out;
+  });
+  const bookmarkSet = $derived(new Set(bookmarks));
+
+  // A faint band behind the member the caret is in: from its declaration to the next one.
+  const band = $derived.by(() => {
+    let from = -1;
+    let to = -1;
+    for (const d of doc.declLines) {
+      if (d.line <= caret.line) {
+        from = doc.nodes[d.node].kind === "class" ? -1 : d.line;
+        to = -1;
+      } else {
+        to = d.line - 1;
+        break;
+      }
+    }
+    if (from < 0) return null;
+    if (to < 0) to = doc.lines.length - 1;
+    // Stop at the member's closing brace, not at the blank lines before the next one.
+    while (to > from && !doc.lines[to].trim()) to--;
+    return { from, to };
+  });
+
   const warnLines = $derived(new Set(doc.lines.flatMap((l, i) => (l.includes("JADX WARN") || l.includes("JADX ERROR") ? [i] : []))));
+
+  /* ---------- marks beside the scrollbar ---------- */
+  type MarkKind = "occ" | "find" | "note" | "bm" | "warn";
+  // Where the selected name, find matches, your notes and bookmarks are in the whole class.
+  const marks = $derived.by(() => {
+    const n = doc.lines.length;
+    if (n < 2) return [];
+    const out = new Map<string, { kind: MarkKind; line: number }>();
+    // One mark per kind and pixel band, so a 20,000-line class doesn't draw 20,000 marks.
+    const add = (kind: MarkKind, line: number) => {
+      const key = `${kind}:${Math.round((line / n) * 400)}`;
+      if (!out.has(key)) out.set(key, { kind, line });
+    };
+    for (const l of warnLines) add("warn", l);
+    for (const l of bookmarks) add("bm", l);
+    for (const l of noteLines.keys()) add("note", l);
+    if (findOpen) for (const m of matches) add("find", m.line);
+    else if (focus.node) {
+      doc.links.forEach((ls, i) => {
+        if (ls.some((k) => doc.nodes[k.node].id === focus.node)) add("occ", i);
+      });
+    } else if (focus.word && n < 40000) {
+      const re = new RegExp(`(^|[^\\w$])${focus.word.replace(/\$/g, "\\$")}(?![\\w$])`);
+      doc.lines.forEach((t, i) => re.test(t) && add("occ", i));
+    }
+    return [...out.values()];
+  });
+
+  function onMarksClick(e: MouseEvent) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const line = Math.floor(((e.clientY - r.top) / r.height) * doc.lines.length);
+    move(line, caret.col);
+    scrollToLine(line, 0, false);
+    scroller.focus();
+  }
 
   /* ---------- find in file ---------- */
   let findOpen = $state(false);
@@ -156,7 +244,7 @@
     }
   }
 
-  const gutterPx = () => (numbered ? (digits + 3) * fontSize * 0.6 : 0);
+  const gutterPx = () => (numbered ? (digits + 4) * fontSize * 0.6 : 0);
 
   $effect(() => {
     const r = reveal;
@@ -346,27 +434,40 @@
     {onkeydown}
     style:--fs="{fontSize}px"
     style:--lh="{lh}px"
-    style:--gw={numbered ? `${digits + 3}ch` : "0px"}
+    style:--gw={numbered ? `${digits + 4}ch` : "0px"}
   >
     <div class="sizer" style:height="{doc.lines.length * lh}px" style:width="calc(var(--gw) + {doc.width + 4}ch + {PAD * 2}px)">
       {#each visible as i (i)}
+        {@const note = noteLines.get(i)}
         <div
           class="ln"
           class:cur={i === caret.line}
+          class:band={band !== null && i >= band.from && i <= band.to}
           class:warn={warnLines.has(i)}
           class:marked={i === marked}
           style:top="{i * lh}px"
           data-l={i}
         >
-          {#if numbered}<span class="no">{i + 1}</span>{/if}<span class="tx"
-            >{#each segs(i) as s (s.col)}<span
-                class="t{s.kind}"
-                class:lk={!!s.link}
-                class:decl={s.link?.decl}
-                class:occ={isOcc(s)}
-                data-c={s.col}>{s.text}</span
-              >{/each}</span
-          >
+          {#if numbered}<span class="no"
+              >{#if bookmarkSet.has(i)}<span class="bm" title="Bookmark"><Icon name="bookmark" size={12} /></span>{/if}{i + 1}</span
+            >{/if}{#if note}<span class="tx"
+              ><span
+                class="note"
+                class:joined-up={noteLines.has(i - 1)}
+                class:joined-down={noteLines.has(i + 1)}
+                style:margin-left="{note.indent}ch"
+                title="Your comment">{#if !noteLines.has(i - 1)}<Icon name="message" size={14} />{:else}<i class="nsp"></i>{/if}{note.text}</span
+              ></span
+            >{:else}<span class="tx"
+              >{#each segs(i) as s (s.col)}<span
+                  class="t{s.kind}"
+                  class:lk={!!s.link}
+                  class:decl={s.link?.decl}
+                  class:occ={isOcc(s)}
+                  class:mine={!!s.link && !!renamed?.(doc.nodes[s.link.node].id)}
+                  data-c={s.col}>{s.text}</span
+                >{/each}</span
+            >{/if}
         </div>
       {/each}
       {#each visibleMatches as m (m.i)}
@@ -381,6 +482,16 @@
       <div class="caret" style:top="{caret.line * lh}px" style:left="calc(var(--gw) + {PAD}px + {caret.col}ch)"></div>
     </div>
   </div>
+
+  {#if marks.length || doc.lines.length > 1}
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div class="marks" onclick={onMarksClick} title="Where the selected name, find matches, your notes and bookmarks are">
+      {#each marks as m (m.kind + m.line)}
+        <i class="m-{m.kind}" style:top="calc({((m.line + 0.5) / doc.lines.length) * 100}% - 1px)"></i>
+      {/each}
+      <i class="m-cur" style:top="calc({((caret.line + 0.5) / doc.lines.length) * 100}% - 1px)"></i>
+    </div>
+  {/if}
 
   {#if findOpen}
     <div class="find" role="search">
@@ -415,11 +526,12 @@
     flex: 1;
     min-width: 0;
     overflow: auto;
-    background: var(--pane);
+    background: var(--editor);
     font: var(--fs) / var(--lh) var(--font-code);
     color: var(--text);
     outline: none;
     cursor: text;
+    padding-top: 6px;
   }
   .sizer {
     position: relative;
@@ -432,6 +544,9 @@
     height: var(--lh);
     display: flex;
     white-space: pre;
+  }
+  .ln.band {
+    background: var(--band);
   }
   .ln.cur {
     background: var(--curline);
@@ -448,41 +563,32 @@
     z-index: 1;
     flex: none;
     width: var(--gw);
-    padding-right: 1ch;
+    padding-right: 2ch;
     text-align: right;
     color: var(--gutter);
-    background: var(--pane);
+    background: var(--editor);
+    font-size: 0.93em;
     user-select: none;
     cursor: default;
   }
+  .ln.band .no {
+    background: var(--band);
+  }
   .ln.cur .no {
-    color: var(--muted);
+    color: var(--text-2);
     background: var(--curline);
+  }
+  .bm {
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: grid;
+    color: var(--ink);
   }
   .tx {
     padding-left: 16px;
     flex: 1;
-  }
-  .tk {
-    color: var(--c-keyword);
-  }
-  .tt {
-    color: var(--c-type);
-  }
-  .tm {
-    color: var(--c-method);
-  }
-  .ts {
-    color: var(--c-string);
-  }
-  .tn {
-    color: var(--c-number);
-  }
-  .tc {
-    color: var(--c-comment);
-  }
-  .ta {
-    color: var(--c-annotation);
   }
   .lk {
     cursor: pointer;
@@ -492,15 +598,51 @@
     text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
     text-underline-offset: 3px;
   }
+  .mine {
+    text-decoration: underline dotted var(--ink);
+    text-underline-offset: 4px;
+  }
   .occ {
     background: var(--occ);
-    border-radius: 2px;
+    border-radius: 3px;
+  }
+  /* One of your comments: shown as a note, not as a jadx comment. */
+  .note {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    height: calc(var(--lh) - 2px);
+    margin-top: 1px;
+    padding: 0 12px 0 10px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--ink) 12%, transparent);
+    font: 500 13.5px var(--font-ui);
+    color: var(--text-hi);
+    user-select: text;
+  }
+  .note :global(svg),
+  .nsp {
+    display: inline-block;
+    color: var(--ink);
+    width: 14px;
+    flex: none;
+  }
+  .note.joined-down {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    height: var(--lh);
+    margin-bottom: -1px;
+  }
+  .note.joined-up {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    margin-top: 0;
   }
   .mark {
     position: absolute;
     height: var(--lh);
     background: var(--find);
-    border-radius: 2px;
+    border-radius: 3px;
     pointer-events: none;
   }
   .mark.on {
@@ -511,7 +653,7 @@
     width: 2px;
     height: var(--lh);
     margin-left: -1px;
-    background: var(--accent);
+    background: var(--text-hi);
     pointer-events: none;
     opacity: 0;
   }
@@ -519,29 +661,62 @@
     opacity: 1;
   }
 
+  .marks {
+    position: relative;
+    width: 14px;
+    flex: none;
+    background: var(--editor);
+    cursor: pointer;
+  }
+  .marks i {
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    height: 3px;
+    border-radius: 2px;
+    pointer-events: none;
+  }
+  .m-occ {
+    background: var(--accent);
+  }
+  .m-find {
+    background: var(--warn);
+  }
+  .m-note,
+  .m-bm {
+    background: var(--ink);
+  }
+  .m-warn {
+    background: var(--bad);
+    opacity: 0.7;
+  }
+  .marks .m-cur {
+    left: 1px;
+    right: 1px;
+    height: 2px;
+    background: var(--text-hi);
+  }
+
   .find {
     position: absolute;
-    top: 8px;
-    right: 18px;
+    top: 10px;
+    right: 26px;
     z-index: 5;
     display: flex;
     align-items: center;
     gap: 4px;
-    height: 34px;
-    padding: 0 4px 0 10px;
-    border-radius: 7px;
-    background: #16181a;
+    height: 38px;
+    padding: 0 5px 0 12px;
+    border-radius: 10px;
+    background: var(--raised);
     color: var(--text-3);
-    box-shadow:
-      0 0 0 1px #2b2f32,
-      0 12px 30px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow);
   }
   .find input {
     width: 220px;
     border: 0;
     outline: none;
     background: transparent;
-    font-size: 12.5px;
     color: var(--text-hi);
     padding: 0 4px;
   }
@@ -550,24 +725,25 @@
   }
   .count {
     min-width: 64px;
-    font: 11.5px var(--font-code);
+    font-size: 12.5px;
     color: var(--text-3);
     white-space: nowrap;
   }
   .find button {
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     display: grid;
     place-items: center;
-    border-radius: 5px;
+    border-radius: 7px;
     color: var(--text-2);
   }
   .find button:hover:not(:disabled) {
-    background: var(--lift-2);
+    background: var(--hover);
     color: var(--text-hi);
   }
   .find button:disabled {
-    color: var(--faint);
+    color: var(--text-3);
+    opacity: 0.5;
     cursor: default;
   }
 </style>

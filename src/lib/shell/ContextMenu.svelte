@@ -1,6 +1,7 @@
 <script lang="ts">
   // A right-click menu at the pointer, styled like the app bar's menus.
   import { tick } from "svelte";
+  import Icon from "$lib/Icon.svelte";
   import type { MenuItem } from "./AppBar.svelte";
 
   let { x, y, items, onclose }: { x: number; y: number; items: (MenuItem | "-")[]; onclose: () => void } = $props();
@@ -44,6 +45,7 @@
       <div class="sep"></div>
     {:else}
       <button role="menuitem" disabled={item.disabled} onclick={() => run(item)}>
+        <span class="chk">{#if item.checked}<Icon name="check" size={14} />{/if}</span>
         <span>{item.label}</span>
         {#if item.key}<kbd>{item.key}</kbd>{/if}
       </button>
@@ -56,23 +58,20 @@
     position: fixed;
     z-index: 70;
     min-width: 230px;
-    padding: 4px;
-    background: #16181a;
-    border-radius: 8px;
-    box-shadow:
-      0 0 0 1px #2b2f32,
-      0 16px 40px rgba(0, 0, 0, 0.6);
+    padding: 5px;
+    background: var(--raised);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
     outline: none;
-    font-size: 12.5px;
   }
   button {
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 6px;
     width: 100%;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 5px;
+    height: 30px;
+    padding: 0 10px 0 4px;
+    border-radius: 7px;
     text-align: left;
     color: var(--text);
     white-space: nowrap;
@@ -80,20 +79,27 @@
   }
   button:hover:not(:disabled),
   button:focus-visible {
-    background: var(--lift-2);
+    background: var(--hover);
+    color: var(--text-hi);
   }
   button:disabled {
-    color: var(--faint);
+    color: var(--text-3);
+    opacity: 0.6;
     cursor: default;
+  }
+  .chk {
+    width: 18px;
+    display: grid;
+    place-items: center;
+    color: var(--accent);
   }
   kbd {
     margin-left: auto;
-    font: 11.5px var(--font-code);
-    color: var(--text-3);
+    padding-left: 24px;
   }
   .sep {
     height: 1px;
-    margin: 4px 6px;
-    background: var(--rule);
+    margin: 5px 8px;
+    background: var(--line);
   }
 </style>

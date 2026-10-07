@@ -45,10 +45,14 @@
   }
 </script>
 
-<label class="filter">
-  <Icon name="search" size={14} />
-  <input bind:value={filter} placeholder={ws.files ? `Filter ${fmtN(ws.files.length)} files` : "Filter files"} spellcheck="false" autocomplete="off" aria-label="Filter files" />
-  {#if filter}<button class="clear" title="Clear" onclick={() => (filter = "")}><Icon name="x" size={13} /></button>{/if}
+<div class="ph">
+  <h2>Files</h2>
+  {#if ws.files}<span class="n">{fmtN(ws.files.length)}</span>{/if}
+</div>
+<label class="field">
+  <Icon name="filter" size={15} />
+  <input bind:value={filter} placeholder="Filter files" spellcheck="false" autocomplete="off" aria-label="Filter files" />
+  {#if filter}<button class="ib clear" title="Clear" onclick={() => (filter = "")}><Icon name="x" size={14} /></button>{/if}
 </label>
 
 <div class="files" role="tree" aria-label="Files">
@@ -61,8 +65,9 @@
   {/if}
   {#each rows as r (r.key)}
     {#if r.type === "pkg"}
-      <button class="row dir" style:padding-left="{8 + r.depth * 14}px" role="treeitem" aria-expanded={r.open} aria-selected="false" onclick={() => toggle(r.key)}>
-        <span class="chev"><Icon name={r.open ? "chevronDown" : "chevronRight"} size={13} /></span>
+      <button class="row dir" style:padding-left="{8 + r.depth * 18}px" role="treeitem" aria-expanded={r.open} aria-selected="false" onclick={() => toggle(r.key)}>
+        {#each Array.from({ length: r.depth }, (_, k) => 16 + k * 18) as x (x)}<span class="gd" style:left="{x}px"></span>{/each}
+        <span class="tw"><Icon name={r.open ? "chevronDown" : "chevronRight"} size={13} /></span>
         <span class="label">{r.pkg.label}</span>
         <span class="n">{fmtN(r.pkg.total)}</span>
       </button>
@@ -71,12 +76,14 @@
         class="row file"
         class:current={r.cls.path === current}
         class:table={r.cls.type === "arsc"}
-        style:padding-left="{filter ? 10 : 8 + r.depth * 14 + 19}px"
+        style:padding-left="{filter ? 8 : 8 + r.depth * 18}px"
         role="treeitem"
         aria-selected={r.cls.path === current}
         title={r.cls.type === "arsc" ? "Decode into res/values files" : r.cls.path}
         onclick={() => onopen(r.cls.path)}
       >
+        {#if !filter}{#each Array.from({ length: r.depth }, (_, k) => 16 + k * 18) as x (x)}<span class="gd" style:left="{x}px"></span>{/each}<span class="tw"></span>{/if}
+        <Icon name="fileCode" size={15} />
         <span class="label">{name(r.cls.path)}</span>
         {#if filter}<span class="where">{dir(r.cls.path)}</span>{/if}
         <span class="n">{r.cls.size >= 0 ? fmtSize(r.cls.size) : ""}</span>
@@ -86,82 +93,71 @@
 </div>
 
 <style>
-  .filter {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 8px 10px 6px;
-    height: 28px;
-    padding: 0 6px 0 9px;
-    border-radius: 6px;
-    background: var(--pane);
-    color: var(--text-3);
-    box-shadow: inset 0 0 0 1px var(--line-2);
-  }
-  .filter:focus-within {
-    box-shadow: inset 0 0 0 1px var(--beam-shade);
-  }
-  .filter input {
-    flex: 1;
-    min-width: 0;
-    border: 0;
-    outline: none;
-    background: transparent;
-    font-size: 12.5px;
-    color: var(--text-hi);
-  }
-  .filter input::placeholder {
-    color: var(--text-3);
-  }
   .clear {
-    display: grid;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
-    color: var(--text-3);
-  }
-  .clear:hover {
-    color: var(--text-hi);
-    background: var(--lift-2);
+    width: 22px;
+    height: 22px;
   }
   .files {
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding-bottom: 12px;
-    font-size: 12.5px;
+    padding: 0 6px 12px;
   }
-  .row {
+  .none {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    margin: 0;
+    padding: 8px 10px;
+    color: var(--text-3);
+  }
+  .none.err {
+    color: var(--bad);
+  }
+  .row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 7px;
     width: 100%;
-    height: 24px;
+    height: 28px;
     padding-right: 10px;
+    border-radius: 7px;
     text-align: left;
     white-space: nowrap;
     color: var(--text);
   }
   .row:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--hover);
   }
   .row.current {
     background: var(--sel);
+    color: var(--text-hi);
   }
-  .chev {
+  .row.file :global(svg) {
+    color: var(--text-3);
+  }
+  .row.table .label {
+    color: var(--c-type);
+  }
+  .gd {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--line);
+  }
+  .tw {
+    width: 16px;
+    height: 16px;
+    flex: none;
     display: grid;
     place-items: center;
-    width: 13px;
-    color: var(--faint);
+    margin-right: -3px;
+    color: var(--text-3);
   }
   .dir .label {
-    color: var(--muted);
-  }
-  .table .label {
-    text-decoration: underline;
-    text-decoration-color: var(--line-2);
-    text-underline-offset: 3px;
+    color: var(--text);
   }
   .label {
     overflow: hidden;
@@ -171,24 +167,14 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    font: 11px var(--font-code);
-    color: var(--faint);
+    font-size: 12.5px;
+    color: var(--text-3);
   }
   .n {
     margin-left: auto;
     padding-left: 8px;
-    font: 11px var(--font-code);
-    color: var(--faint);
-  }
-  .none {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0;
-    padding: 14px 12px;
-    color: var(--faint);
-  }
-  .err {
-    color: var(--error);
+    font-size: 12.5px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
   }
 </style>

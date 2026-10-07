@@ -28,6 +28,11 @@
   }
 </script>
 
+<div class="ph">
+  <h2>Notes</h2>
+  <span class="n">{renames.length + comments.length + ws.project.bookmarks.length}</span>
+</div>
+
 <div class="notes">
   {#if !renames.length && !comments.length && !ws.project.bookmarks.length}
     <p class="none">Renames, comments and bookmarks you add show up here and are saved with the file.</p>
@@ -38,14 +43,15 @@
     </dl>
   {/if}
 
-  {#if renames.length}
-    <div class="sec">Renamed <span class="n">{renames.length}</span></div>
-    {#each renames as [id, name] (id)}
+  {#if ws.project.bookmarks.length}
+    <div class="sec">Bookmarks <span class="n">{ws.project.bookmarks.length}</span></div>
+    {#each ws.project.bookmarks as b (b.cls + ":" + b.line)}
       <div class="row">
-        <button class="go" onclick={() => onnode(id)} title={dotted(id)}>
-          <span class="new">{name}</span><span class="old">{original(id)}</span>
+        <button class="go" onclick={() => onbookmark(b.cls, b.line)} title={dotted(b.cls)}>
+          <span class="a">{ws.className(b.cls)}<span class="dim">:{b.line + 1}</span></span>
+          <span class="b mono">{b.note || "(empty line)"}</span>
         </button>
-        <button class="ib" title="Restore the original name" onclick={() => forget("renames", id)}><Icon name="x" size={13} /></button>
+        <button class="ib" title="Remove the bookmark" onclick={() => ws.toggleBookmark(b.cls, b.line, b.note)}><Icon name="x" size={14} /></button>
       </div>
     {/each}
   {/if}
@@ -55,21 +61,23 @@
     {#each comments as [id, text] (id)}
       <div class="row">
         <button class="go" onclick={() => onnode(id)} title={dotted(id)}>
-          <span class="txt">{text}</span><span class="old">{ws.project.renames[id] ?? original(id)}</span>
+          <span class="a">{ws.project.renames[id] ?? original(id)}</span>
+          <span class="b note">{text}</span>
         </button>
-        <button class="ib" title="Remove the comment" onclick={() => forget("comments", id)}><Icon name="x" size={13} /></button>
+        <button class="ib" title="Remove the comment" onclick={() => forget("comments", id)}><Icon name="x" size={14} /></button>
       </div>
     {/each}
   {/if}
 
-  {#if ws.project.bookmarks.length}
-    <div class="sec">Bookmarks <span class="n">{ws.project.bookmarks.length}</span></div>
-    {#each ws.project.bookmarks as b (b.cls + ":" + b.line)}
+  {#if renames.length}
+    <div class="sec">Renames <span class="n">{renames.length}</span></div>
+    {#each renames as [id, name] (id)}
       <div class="row">
-        <button class="go" onclick={() => onbookmark(b.cls, b.line)} title={dotted(b.cls)}>
-          <span class="txt mono">{b.note || "(empty line)"}</span><span class="old">{ws.className(b.cls)}:{b.line + 1}</span>
+        <button class="go" onclick={() => onnode(id)} title={dotted(id)}>
+          <span class="a">{original(id)} <span class="dim">to</span> {name}</span>
+          <span class="b">{id.includes(".") ? (id.includes("(") ? "method" : "field") : "class"} in {simpleName(ownerOf(id))}</span>
         </button>
-        <button class="ib" title="Remove the bookmark" onclick={() => ws.toggleBookmark(b.cls, b.line, b.note)}><Icon name="x" size={13} /></button>
+        <button class="ib" title="Restore the original name" onclick={() => forget("renames", id)}><Icon name="x" size={14} /></button>
       </div>
     {/each}
   {/if}
@@ -80,44 +88,49 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding-bottom: 12px;
+    padding: 0 6px 12px;
   }
   .none {
     margin: 0;
-    padding: 14px 12px 10px;
+    padding: 0 10px 12px;
     color: var(--text-3);
-    font-size: 12.5px;
-    line-height: 1.5;
   }
   .keys {
     display: grid;
     grid-template-columns: auto 1fr;
-    gap: 8px 10px;
-    margin: 0;
-    padding: 4px 12px;
-    font-size: 12px;
-    color: var(--text-3);
-    align-items: center;
+    gap: 10px 12px;
+    margin: 4px 10px;
+    color: var(--text-2);
+  }
+  .keys dt {
+    text-align: right;
   }
   .keys dd {
     margin: 0;
   }
   .sec {
-    padding: 12px 12px 4px;
-    font-size: 11.5px;
+    padding: 12px 10px 4px;
     font-weight: 600;
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .sec .n {
-    font: 400 11px var(--font-code);
+    font-weight: 400;
+    color: var(--text-3);
   }
   .row {
     display: flex;
     align-items: center;
-    padding-right: 6px;
+    border-radius: 8px;
   }
   .row:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--hover);
+  }
+  .row .ib {
+    visibility: hidden;
+    margin-right: 4px;
+  }
+  .row:hover .ib {
+    visibility: visible;
   }
   .go {
     flex: 1;
@@ -125,42 +138,30 @@
     display: flex;
     flex-direction: column;
     gap: 1px;
-    padding: 4px 12px;
+    padding: 6px 10px 7px;
     text-align: left;
   }
-  .new,
-  .txt {
-    font-size: 12.5px;
+  .a {
+    font: 13px var(--font-code);
     color: var(--text-hi);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .mono {
-    font: 11.5px var(--font-code);
-  }
-  .old {
-    font: 11px var(--font-code);
-    color: var(--faint);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .ib {
-    flex: none;
-    width: 24px;
-    height: 24px;
-    display: grid;
-    place-items: center;
-    border-radius: 5px;
+  .b {
     color: var(--text-3);
-    opacity: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .row:hover .ib {
-    opacity: 1;
+  .b.mono {
+    font: 12.5px var(--font-code);
   }
-  .ib:hover {
-    background: var(--lift-2);
-    color: var(--text-hi);
+  .b.note {
+    color: var(--text-2);
+    white-space: normal;
+  }
+  .dim {
+    color: var(--text-3);
   }
 </style>

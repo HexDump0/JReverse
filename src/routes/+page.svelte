@@ -23,15 +23,17 @@
     type RecentView,
   } from "$lib/engine";
   import { baseName, dirName, tildify } from "$lib/format";
+  import { fmtN } from "$lib/format";
   import { say, setTask } from "$lib/status.svelte";
-  import AppBar, { type Menu } from "$lib/shell/AppBar.svelte";
+  import { setTheme, theme, THEMES } from "$lib/theme.svelte";
+  import AppBar, { type Menu, type MenuItem } from "$lib/shell/AppBar.svelte";
   import StatusBar from "$lib/shell/StatusBar.svelte";
   import Palette, { type PaletteItem } from "$lib/shell/Palette.svelte";
   import Shortcuts from "$lib/shell/Shortcuts.svelte";
   import StartScreen from "$lib/start/StartScreen.svelte";
   import Onboarding, { onboarded } from "$lib/start/Onboarding.svelte";
   import Workbench from "$lib/workbench/Workbench.svelte";
-  import { simpleName, Workspace } from "$lib/workbench/workspace.svelte";
+  import { Workspace } from "$lib/workbench/workspace.svelte";
 
   const MAX_LOG = 500;
   /** `VITE_FIRST_RUN=1` shows onboarding on every launch and hides recent files, as a new user sees it. */
@@ -44,7 +46,6 @@
   let recents = $state<RecentView[]>([]);
   let home = $state<string | null>(null);
   let example = $state<{ path: string; peek: Peek } | null>(null);
-  let resume = $state<{ path: string; at: string | null; notes: number } | null>(null);
   let ws = $state<Workspace | null>(null);
   let workbench = $state<Workbench>();
   let readout = $state<Peek | null>(null);
@@ -70,21 +71,10 @@
 
   async function refreshRecents() {
     recents = await recentFiles();
-    loadResume(recents[0]);
     if (!example) {
       const path = await exampleFile();
       if (path) example = { path, peek: await peekFile(path) };
     }
-  }
-
-  // What the Continue card resumes into, from the file's saved project.
-  async function loadResume(r: RecentView | undefined) {
-    if (!r || r.missing) return (resume = null);
-    const p = await loadProject(r.path).catch(() => null);
-    if (!p) return (resume = null);
-    const cls = p.active?.startsWith("class:") ? p.active.slice(6) : null;
-    const notes = Object.keys(p.renames).length + Object.keys(p.comments).length + p.bookmarks.length;
-    resume = { path: r.path, at: cls ? (p.renames[cls] ?? simpleName(cls)) : null, notes };
   }
 
   async function browse() {
@@ -213,18 +203,20 @@
         { label: "Clear recent files", disabled: !!ws || recents.length < 2, run: clearRecents },
       ],
     };
-    const always = [
+    const always: (MenuItem | "-")[] = [
       { label: "Go to anything", key: "Ctrl P", run: () => (paletteOpen = true) },
       { label: "Keyboard shortcuts", key: "F1", run: () => (shortcutsOpen = true) },
       { label: logOpen ? "Hide log" : "Show log", run: () => (logOpen = !logOpen) },
+      "-",
     ];
+    const themes: (MenuItem | "-")[] = ["-", ...THEMES.map((t) => ({ label: `${t.label} theme`, checked: theme.id === t.id, run: () => setTheme(t.id) }))];
     if (ws && workbench) {
       const more = workbench.menus();
       const view = more.find((m) => m.label === "View");
-      if (view) view.items = [...always, ...view.items];
+      if (view) view.items = [...always, ...view.items, ...themes];
       return [file, ...more];
     }
-    return [file, { label: "View", items: always }];
+    return [file, { label: "View", items: [...always.slice(0, -1), ...themes] }];
   });
 
   const paletteItems = $derived.by((): PaletteItem[] => {
@@ -240,13 +232,14 @@
     const act = (label: string, sub: string, run: () => void) => items.push({ section: "Actions", label, sub, action: true, run });
     act("Open file", "Ctrl O", browse);
     if (ws && workbench) {
-      for (const m of workbench.menus()) for (const it of m.items) if (!it.disabled) act(it.label, it.key ?? "", it.run);
+      for (const m of workbench.menus()) for (const it of m.items) if (it !== "-" && !it.disabled) act(it.label, it.key ?? "", it.run);
       for (const it of workbench.fileItems()) if (!it.disabled) act(it.label, it.key ?? "", it.run);
       act("Close file", "Ctrl Shift W", closeFile);
     }
     else if (recents.length > 1) act("Clear recent files", "", clearRecents);
     act("Keyboard shortcuts", "F1", () => (shortcutsOpen = true));
     act(logOpen ? "Hide log" : "Show log", "", () => (logOpen = !logOpen));
+    for (const t of THEMES) if (t.id !== theme.id) act(`${t.label} theme`, "", () => setTheme(t.id));
     return items;
   });
 
@@ -303,7 +296,7 @@
 <svelte:window {onkeydown} />
 
 <div class="app">
-  <AppBar {menus} bare={onboarding} onpalette={() => (paletteOpen = !opening)} />
+  <AppBar {menus} location={ws && workbench ? workbench.location() : null} bare={onboarding} onpalette={() => (paletteOpen = !opening)} />
 
   {#if onboarding}
     <Onboarding onfinish={() => (onboarding = false)} />
@@ -315,11 +308,9 @@
     <StartScreen
       recents={FIRST_RUN ? [] : recents}
       {example}
-      {resume}
       {home}
       {readout}
       opening={opening && { path: opening.path, peek: opening.peek, text: openingText }}
-      {drag}
       active={!paletteOpen}
       onopen={openPath}
       onbrowse={browse}
@@ -333,15 +324,32 @@
   {/if}
 
   {#if logOpen}
-    <section class="log" aria-label="Engine log">
+    <section class="log island" aria-label="Engine log">
       <pre>{log.length ? log.join("\n") : "The engine hasn't logged anything yet."}</pre>
     </section>
   {/if}
 
   {#if !onboarding}
-    <StatusBar {logOpen} ontogglelog={() => (logOpen = !logOpen)} where={ws && workbench ? workbench.where() : []} />
+    <StatusBar
+      {engine}
+      info={ws ? `${ws.opened.kind.toUpperCase()}, ${fmtN(ws.classes.length)} classes` : ""}
+      where={ws && workbench ? workbench.where() : []}
+      inspector={ws && workbench ? workbench.inspectorState() : null}
+      ontoggleinspector={() => workbench?.toggleInspector()}
+      {logOpen}
+      ontogglelog={() => (logOpen = !logOpen)}
+    />
   {/if}
 </div>
+
+{#if drag && !onboarding}
+  <div class="drop" aria-hidden="true">
+    <div>
+      <h2>Drop to open</h2>
+      <p>APK, AAB, AAR, JAR, WAR, DEX or a class file{ws ? `. ${ws.name} is saved and closed first.` : ""}</p>
+    </div>
+  </div>
+{/if}
 
 {#if shortcutsOpen}
   <Shortcuts onclose={() => (shortcutsOpen = false)} />
@@ -362,20 +370,45 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--ground);
+    background: var(--frame);
+  }
+  .drop {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    background: color-mix(in srgb, var(--frame) 94%, transparent);
+    pointer-events: none;
+  }
+  .drop::before {
+    content: "";
+    position: absolute;
+    inset: 12px;
+    border: 1.5px solid var(--accent);
+    border-radius: 14px;
+  }
+  .drop h2 {
+    margin: 0 0 8px;
+    font: 600 30px var(--font-ui);
+    color: var(--text-hi);
+  }
+  .drop p {
+    margin: 0;
+    color: var(--text-2);
   }
   .log {
     flex: none;
     height: 200px;
+    margin: 6px 6px 0 56px;
     overflow: auto;
-    background: var(--side);
-    border-top: 1px solid var(--line);
   }
   .log pre {
     user-select: text;
     margin: 0;
-    padding: 10px 14px;
-    font: 11.5px/1.6 var(--font-code);
-    color: var(--muted);
+    padding: 12px 16px;
+    font: 12px/1.6 var(--font-code);
+    color: var(--text-2);
   }
 </style>

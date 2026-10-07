@@ -46,6 +46,12 @@ Things that look wrong, break silently or have already wasted time. Add to this.
 
 ## Frontend
 
+- `app.css` defines global classes: `.island .ph .ib .field .btn .k .key .spin` and the syntax
+  classes `.tk .tt .tm .tf .tv .tp .ts .tn .tc .ta`. A component class with one of these names
+  picks up the global style too (a status bar button named `.btn` turned into a bordered button).
+- The theme is applied twice on purpose: an inline script in `app.html` sets `data-theme` before the
+  first paint, and `theme.svelte.ts` keeps it in sync afterwards. Keep the storage key the same.
+
 - Svelte trims whitespace at the start of an element's content: `<span class="dim"> build 12</span>`
   renders with no space. Space it with CSS (`margin-left`) or `{" "}` outside the span.
 - The `font:` shorthand in a component's style resets `font-variant-ligatures`, so JetBrains Mono
@@ -56,6 +62,10 @@ Things that look wrong, break silently or have already wasted time. Add to this.
   the `selectable` class. The code view's Ctrl+A selects only the lines on screen (virtualized).
 
 ## Testing
+
+- Headless Chromium over CDP: `Page.addScriptToEvaluateOnNewDocument` scripts end with the CDP
+  connection, and navigating to the same URL with only a new `#hash` doesn't load a new document.
+  Navigate to `about:blank` first, then to the page, in every connection that needs the Tauri shim.
 
 - Better than mocked IPC: a small Node bridge that runs the real engine jar and answers the app's
   commands over HTTP, with Playwright (`playwright-core`, Chromium at
@@ -72,6 +82,9 @@ Things that look wrong, break silently or have already wasted time. Add to this.
   `transformCallback` and `metadata.currentWindow/currentWebview`) via CDP
   `Page.addScriptToEvaluateOnNewDocument`, then `Page.captureScreenshot`. Node 22+ has a global
   `WebSocket`, so no deps are needed. `homeDir()` goes through `plugin:path|resolve_directory`.
+  Call `Page.enable` first, or the script isn't injected and the page is blank (`getCurrentWindow`
+  throws). `currentWebview` needs `windowLabel` as well as `label`. The owner's `.env` has
+  `VITE_FIRST_RUN=1`; start with `VITE_FIRST_RUN=0 pnpm dev` to see recent files.
 
 - Gradle caches test results. `pnpm engine:test` can print UP-TO-DATE without
   running anything. Use `cd engine && ./gradlew test smokeTest --rerun-tasks`

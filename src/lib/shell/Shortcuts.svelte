@@ -10,6 +10,7 @@
         [["Ctrl P"], "Go to a class; @ for a member, : for a line, > for actions"],
         [["Ctrl Shift F"], "Search names, code and strings"],
         [["Ctrl Shift E"], "Filter the class list"],
+        [["Ctrl Alt I"], "Show or hide the inspector"],
         [["Alt Left", "Alt Right"], "Back, forward"],
         [["Ctrl W"], "Close the tab"],
         [["Ctrl Tab"], "Next tab"],
@@ -76,11 +77,9 @@
     max-height: calc(100% - 120px);
     overflow: auto;
     padding: 20px 26px 24px;
-    background: #16181a;
+    background: var(--raised);
     border-radius: 10px;
-    box-shadow:
-      0 0 0 1px #2b2f32,
-      0 24px 60px rgba(0, 0, 0, 0.65);
+    box-shadow: var(--shadow);
   }
   h2 {
     margin: 0 0 16px;

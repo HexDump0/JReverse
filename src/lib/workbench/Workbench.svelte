@@ -1,7 +1,8 @@
 <script lang="ts">
-  // The main window once a file is open: the class tree (or search, or notes)
-  // on the left, tabs of decompiled classes in the middle, the class outline on
-  // the right and usages underneath. Keyboard shortcuts follow jadx-gui.
+  // The main window once a file is open: a rail of side panels (classes, files,
+  // search, notes), tabs of decompiled classes in the middle, the inspector for
+  // what's under the caret on the right, and usages underneath. Keyboard
+  // shortcuts follow jadx-gui.
   import { tick, untrack } from "svelte";
   import { open as pickPath, save as pickSave } from "@tauri-apps/plugin-dialog";
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -9,15 +10,15 @@
   import Icon from "$lib/Icon.svelte";
   import { fmtN, fmtSize } from "$lib/format";
   import { say, setTask } from "$lib/status.svelte";
-  import type { Menu, MenuItem } from "$lib/shell/AppBar.svelte";
+  import type { Location, Menu, MenuItem } from "$lib/shell/AppBar.svelte";
   import ContextMenu from "$lib/shell/ContextMenu.svelte";
   import Prompt, { type PromptRequest } from "$lib/shell/Prompt.svelte";
   import type { PaletteItem } from "$lib/shell/Palette.svelte";
-  import ClassTree from "./ClassTree.svelte";
+  import ClassTree, { KIND_CLASS, KIND_LETTER, type Member } from "./ClassTree.svelte";
   import CodeView from "./CodeView.svelte";
   import FilesPanel from "./FilesPanel.svelte";
   import NotesPanel from "./NotesPanel.svelte";
-  import Outline from "./Outline.svelte";
+  import Inspector from "./Inspector.svelte";
   import OverviewPage from "./OverviewPage.svelte";
   import SearchPanel from "./SearchPanel.svelte";
   import UsagesPanel from "./UsagesPanel.svelte";
@@ -45,13 +46,14 @@
 
   interface Prefs {
     side: number;
-    outline: boolean;
+    inspector: boolean;
     fontSize: number;
     usages: number;
   }
-  const prefs: Prefs = $state({ side: 290, outline: true, fontSize: 13, usages: 230 });
+  const prefs: Prefs = $state({ side: 296, inspector: true, fontSize: 13.5, usages: 230 });
   try {
-    Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS) ?? "{}"));
+    const { outline: _, ...saved } = JSON.parse(localStorage.getItem(PREFS) ?? "{}");
+    Object.assign(prefs, saved);
   } catch {
     // Defaults it is.
   }
@@ -67,10 +69,10 @@
   let side = $state<Side>("classes");
   let filter = $state("");
   let code = $state<CodeView>();
-  let tree = $state<ClassTree>();
   let searchPanel = $state<SearchPanel>();
   let filterInput = $state<HTMLInputElement>();
   let ctx = $state<{ x: number; y: number; items: (MenuItem | "-")[] } | null>(null);
+  let tree = $state<ClassTree>();
   let prompt = $state<PromptRequest | null>(null);
   let exporting = $state<{ ticket: string; done: number; total: number } | null>(null);
 
@@ -93,6 +95,34 @@
         ],
   );
 
+  /** The Java views and the low-level one: Java and Smali for DEX, Java and Bytecode for class files. */
+  const javaViews = $derived(views.filter((v) => v.view !== "smali"));
+  const lowView = $derived(views.find((v) => v.view === "smali")!);
+  const inspecting = $derived(prefs.inspector && tab.kind === "class");
+
+  /** Members of the class in the active tab, for the tree. */
+  const members = $derived.by((): Member[] => {
+    if (!doc || tab.kind !== "class" || !tab.cls) return [];
+    void ws.names;
+    const seen = new Set<string>();
+    const out: Member[] = [];
+    for (const d of doc.declLines) {
+      const n = doc.nodes[d.node];
+      if (seen.has(n.id) || n.id === tab.cls) continue;
+      seen.add(n.id);
+      const params = n.kind === "method" ? (/\(.*\)/.exec(n.detail)?.[0] ?? "()") : "";
+      const pos = doc.decls.get(n.id)!;
+      out.push({ id: n.id, kind: n.kind, name: n.name, params, line: pos.line, col: pos.col });
+    }
+    return out;
+  });
+  const memberAt = $derived(doc && tab.kind === "class" ? enclosing(doc, tab.caret.line)?.id : undefined);
+
+  const notes = $derived(new Set(Object.values(ws.project.comments).flatMap((c) => c.split("\n").map((l) => l.trim()))));
+  const bookmarksHere = $derived(tab.kind === "class" && tab.view === "java" ? ws.project.bookmarks.filter((b) => b.cls === tab.cls).map((b) => b.line) : []);
+  const isRenamedNode = (id: string) => id in ws.project.renames;
+  const noteCount = $derived(Object.keys(ws.project.renames).length + Object.keys(ws.project.comments).length + ws.project.bookmarks.length);
+
   untrack(() => ws.restore());
 
   /** For the status bar: where the caret is, and how this class came out. */
@@ -101,9 +131,36 @@
     const parts = [`Ln ${tab.caret.line + 1}, Col ${tab.caret.col + 1}`];
     if (tab.kind === "class" && tab.view !== "smali") {
       if (doc.warnings) parts.push(`${doc.warnings} ${doc.warnings === 1 ? "warning" : "warnings"}`);
-      parts.push(`${doc.engine} ${doc.ms} ms`);
+      parts.push(`${doc.engine}, ${doc.ms} ms`);
     }
     return parts;
+  }
+
+  /** For the title bar: the file, then package, class and the member the caret is in. */
+  export function location(): Location {
+    const parts: Location["parts"] = [{ label: ws.name, run: () => ws.showOverview() }];
+    if (tab.kind === "overview") parts.push({ label: "Overview" });
+    else if (tab.kind === "manifest") parts.push({ label: "AndroidManifest.xml" });
+    else if (tab.kind === "file") parts.push(...tab.path!.split("/").map((label) => ({ label })));
+    else {
+      if (pkg) parts.push({ label: pkg.slice(pkg.lastIndexOf(".") + 1), run: () => ((side = "classes"), (filter = ""), tree?.revealCurrent()) });
+      parts.push({ label: ws.className(tab.cls!), run: () => jumpToLine(1) });
+      const m = doc && enclosing(doc, tab.caret.line);
+      if (m && m.kind !== "class") {
+        const pos = doc!.decls.get(m.id);
+        parts.push({ label: m.kind === "method" ? `${m.name}()` : m.name, run: pos ? () => jump(pos) : undefined });
+      }
+    }
+    return { parts, back: ws.back.length > 0, forward: ws.fwd.length > 0, onback: () => ws.goBack(), onforward: () => ws.goForward() };
+  }
+
+  export function toggleInspector() {
+    prefs.inspector = !prefs.inspector;
+  }
+
+  /** Whether the inspector is showing, or null where it can't (the Overview, resources). */
+  export function inspectorState(): boolean | null {
+    return tab.kind === "class" ? prefs.inspector : null;
   }
 
   /* ---------- what the caret is on ---------- */
@@ -312,7 +369,16 @@
   });
 
   function zoom(by: number) {
-    prefs.fontSize = by === 0 ? 13 : Math.max(10, Math.min(22, prefs.fontSize + by));
+    prefs.fontSize = by === 0 ? 13.5 : Math.max(10, Math.min(22, prefs.fontSize + by));
+  }
+
+  function pickDecompiler(e: MouseEvent) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    ctx = {
+      x: r.left,
+      y: r.bottom + 4,
+      items: javaViews.map((v) => ({ label: v.view === "java" ? "jadx" : v.label, checked: tab.view === v.view, run: () => ws.setView(v.view) })),
+    };
   }
 
   /* ---------- opening things from panels ---------- */
@@ -418,7 +484,9 @@
           { label: "Classes", run: focusClasses },
           { label: "Files", run: () => (side = "files") },
           { label: "Notes", run: () => (side = "notes") },
-          { label: prefs.outline ? "Hide outline" : "Show outline", run: () => (prefs.outline = !prefs.outline) },
+          { label: "Search", key: "Ctrl Shift F", run: () => openSearch(false) },
+          { label: prefs.inspector ? "Hide inspector" : "Show inspector", key: "Ctrl Alt I", run: toggleInspector },
+          "-",
           { label: "Bigger text", key: "Ctrl =", run: () => zoom(1) },
           { label: "Smaller text", key: "Ctrl -", run: () => zoom(-1) },
           { label: "Reset text size", key: "Ctrl 0", run: () => zoom(0) },
@@ -491,6 +559,7 @@
     else if (mod && key === "-") zoom(-1);
     else if (mod && key === "0") zoom(0);
     else if (mod && e.shiftKey && key === "e") focusClasses();
+    else if (mod && e.altKey && key === "i") toggleInspector();
     else if (mod && e.shiftKey && key === "c" && doc) copySource();
     else if (!typing && !mod && !e.altKey && inCode) {
       if (key === "d" || key === "Enter" || key === "F12") goToDeclaration();
@@ -552,23 +621,37 @@
 
 <svelte:window {onkeydown} {onmouseup} />
 
-<div class="bench" style:--side="{prefs.side}px">
-  <aside class="side">
-    <div class="modes" role="tablist">
-      <button role="tab" aria-selected={side === "classes"} class:on={side === "classes"} onclick={() => (side = "classes")}>Classes</button>
-      <button role="tab" aria-selected={side === "files"} class:on={side === "files"} onclick={() => (side = "files")}>Files</button>
-      <button role="tab" aria-selected={side === "search"} class:on={side === "search"} onclick={() => openSearch(false)}>Search</button>
-      <button role="tab" aria-selected={side === "notes"} class:on={side === "notes"} onclick={() => (side = "notes")}>
-        Notes{#if Object.keys(ws.project.renames).length + Object.keys(ws.project.comments).length + ws.project.bookmarks.length}<span class="badge">{Object.keys(ws.project.renames).length + Object.keys(ws.project.comments).length + ws.project.bookmarks.length}</span>{/if}
-      </button>
-    </div>
+{#snippet railButton(id: Side, icon: "listTree" | "files" | "search" | "bookmark", label: string, key: string)}
+  <button class:on={side === id} title="{label} ({key})" aria-label={label} onclick={() => (id === "search" ? openSearch(false) : id === "classes" ? focusClasses() : (side = id))}>
+    <Icon name={icon} size={20} />
+    {#if id === "notes" && noteCount}<span class="badge">{noteCount}</span>{/if}
+  </button>
+{/snippet}
+
+<div class="bench" class:insp={inspecting} style:--side="{prefs.side}px">
+  <nav class="rail" aria-label="Panels">
+    {@render railButton("classes", "listTree", "Classes", "Ctrl Shift E")}
+    {@render railButton("files", "files", "Files", "View menu")}
+    {@render railButton("search", "search", "Search", "Ctrl Shift F")}
+    {@render railButton("notes", "bookmark", "Notes", "View menu")}
+  </nav>
+
+  <section class="island side">
     {#if side === "classes"}
-      <label class="filter">
-        <Icon name="search" size={14} />
+      <div class="ph">
+        <h2>Classes</h2>
+        <span class="n">{fmtN(ws.classes.length)}</span>
+        <span class="acts">
+          <button class="ib" title="Collapse all" onclick={() => tree?.collapseAll()}><Icon name="fold" size={16} /></button>
+          <button class="ib" title="Show the open class" onclick={() => ((filter = ""), tree?.revealCurrent())}><Icon name="target" size={16} /></button>
+        </span>
+      </div>
+      <label class="field">
+        <Icon name="filter" size={15} />
         <input
           bind:this={filterInput}
           bind:value={filter}
-          placeholder="Filter {fmtN(ws.classes.length)} classes"
+          placeholder="Filter classes"
           spellcheck="false"
           autocomplete="off"
           aria-label="Filter classes"
@@ -583,123 +666,141 @@
             }
           }}
         />
-        {#if filter}<button class="clear" title="Clear" onclick={() => (filter = "")}><Icon name="x" size={13} /></button>{/if}
+        {#if filter}<button class="ib clear" title="Clear" onclick={() => (filter = "")}><Icon name="x" size={14} /></button>{/if}
       </label>
       {#key ws}
-        <ClassTree bind:this={tree} {ws} {filter} current={tab.cls} onopen={(cls) => ws.openClass(cls)} oncontext={onTreeContext} />
+        <ClassTree
+          bind:this={tree}
+          {ws}
+          {filter}
+          current={tab.cls}
+          {members}
+          {memberAt}
+          onopen={(cls) => ws.openClass(cls)}
+          onmember={(m) => jump({ line: m.line, col: m.col })}
+          oncontext={onTreeContext}
+        />
       {/key}
     {:else if side === "files"}
       <FilesPanel {ws} current={tab.path} onopen={(p) => ws.openFile(p)} />
     {:else if side === "search"}
-      <SearchPanel bind:this={searchPanel} {ws} onopen={openHit} />
+      <SearchPanel bind:this={searchPanel} {ws} onopen={openHit} onclose={() => (side = "classes")} />
     {:else}
       <NotesPanel {ws} onnode={openNode} onbookmark={(cls, line) => ws.openClass(cls, { pos: { line, col: 0 }, mark: true })} />
     {/if}
-  </aside>
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="split v" onpointerdown={(e) => drag(e, "side")}></div>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="grip" title="Drag to resize" onpointerdown={(e) => drag(e, "side")}></div>
+  </section>
 
-  <div class="main">
+  <section class="island main">
     <div class="tabs" role="tablist">
-      {#each ws.tabs as t (t.key)}
-        <div
-          class="tab"
-          class:on={t.key === ws.activeKey}
-          role="tab"
-          tabindex="-1"
-          aria-selected={t.key === ws.activeKey}
-          title={t.cls ? dotted(t.cls) : (t.path ?? "")}
-          onclick={() => ws.activate(t.key)}
-          onkeydown={() => {}}
-          onauxclick={(e) => e.button === 1 && ws.closeTab(t.key)}
-        >
-          <span class="tl" class:renamed={!!t.cls && ws.isRenamed(t.cls)}>{tabLabel(t)}</span>
-          {#if t.kind === "class" && t.view !== "java"}<span class="tv">{views.find((v) => v.view === t.view)?.tag}</span>{/if}
-          {#if t.kind !== "overview"}
-            <button class="tx" title="Close (Ctrl W)" onclick={(e) => (e.stopPropagation(), ws.closeTab(t.key))}><Icon name="x" size={12} /></button>
-          {/if}
-        </div>
-      {/each}
-      <div class="tabfill"></div>
-      <button class="ib" class:on={prefs.outline} title={prefs.outline ? "Hide outline" : "Show outline"} onclick={() => (prefs.outline = !prefs.outline)}>
-        <Icon name="layoutSidebarRight" size={15} />
-      </button>
-    </div>
-
-    <div class="editor">
-      {#if tab.kind === "overview"}
-        <OverviewPage {ws} {home} onfilter={(p) => ((side = "classes"), (filter = p))} onreopen={reopen} />
-      {:else}
-        <div class="crumbs">
-          {#if tab.kind === "manifest"}
-            <span class="cn">AndroidManifest.xml</span>
-          {:else if tab.kind === "file"}
-            {#if tab.path!.includes("/")}<span class="pk">{tab.path!.slice(0, tab.path!.lastIndexOf("/"))}</span>{/if}
-            <span class="cn">{fileName(tab.path!)}</span>
-            {#if entry?.state === "ready" && entry.note}<span class="note">{entry.note}</span>{/if}
-          {:else}
-            {#if pkg}<span class="pk">{pkg}</span>{/if}
-            <span class="cn">{ws.className(tab.cls!)}</span>
-            {#if ws.isRenamed(tab.cls!)}<span class="pk">{simpleName(tab.cls!)}</span>{/if}
-            <div class="seg" role="radiogroup" aria-label="View">
-              {#each views as v (v.view)}
-                <button role="radio" aria-checked={tab.view === v.view} class:on={tab.view === v.view} onclick={() => ws.setView(v.view)}>{v.label}</button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-        <div class="codewrap">
-          {#if doc}
-            {#key `${tab.key}:${tab.view}`}
-              <CodeView
-                bind:this={code}
-                {doc}
-                caret={tab.caret}
-                reveal={tab.reveal}
-                top={tab.top}
-                seen={tab.seen}
-                fontSize={prefs.fontSize}
-                onfollow={follow}
-                oncaret={(p) => (tab.caret = p)}
-                oncontext={onCodeContext}
-                onscrolled={(px) => (tab.top = px)}
-                onrevealed={(n) => (tab.seen = n)}
-              />
-            {/key}
-            {#if prefs.outline && tab.kind === "class" && doc.declLines.length}
-              <aside class="outline">
-                <div class="oh">Outline</div>
-                <Outline {doc} caret={tab.caret} onjump={jump} />
-              </aside>
+      <div class="tablist">
+        {#each ws.tabs as t (t.key)}
+          {@const kind = t.cls ? ws.byId.get(t.cls)?.kind : undefined}
+          <div
+            class="tab"
+            class:on={t.key === ws.activeKey}
+            role="tab"
+            tabindex="-1"
+            aria-selected={t.key === ws.activeKey}
+            title={t.cls ? dotted(t.cls) : (t.path ?? "")}
+            onclick={() => ws.activate(t.key)}
+            onkeydown={() => {}}
+            onauxclick={(e) => e.button === 1 && ws.closeTab(t.key)}
+          >
+            {#if t.kind === "overview"}<Icon name="info" size={15} />
+            {:else if t.kind === "class"}<span class="k {kind ? KIND_CLASS[kind] : 'k-c'}">{kind ? KIND_LETTER[kind] : "C"}</span>
+            {:else}<Icon name="fileCode" size={15} />{/if}
+            <span class="tl">{tabLabel(t)}</span>
+            {#if t.kind === "class" && t.view !== "java"}<span class="vt">{views.find((v) => v.view === t.view)?.tag}</span>{/if}
+            {#if t.kind !== "overview"}
+              <button class="tx" title="Close (Ctrl W)" onclick={(e) => (e.stopPropagation(), ws.closeTab(t.key))}><Icon name="x" size={13} /></button>
             {/if}
-          {:else if entry?.state === "image"}
-            <div class="image">
-              <img src={entry.src} alt={fileName(tab.path ?? "")} onload={(e) => (imageSize = `${(e.currentTarget as HTMLImageElement).naturalWidth} x ${(e.currentTarget as HTMLImageElement).naturalHeight}`)} />
-              <p>{imageSize}<span class="dim">{fmtSize(entry.size)}</span></p>
-            </div>
-          {:else if entry?.state === "error"}
-            <div class="state err">
-              <p>Couldn't {tab.kind === "file" ? "read" : "decompile"} {tab.kind === "file" ? fileName(tab.path ?? "") : ws.className(tab.cls ?? "")}</p>
-              <pre>{entry.message}</pre>
-              {#each views.filter((v) => v.view !== tab.view) as v (v.view)}
-                <button class="lnk" onclick={() => ws.setView(v.view)}>Show {v.label} instead</button>
-              {/each}
-            </div>
-          {:else}
-            <div class="state"><i class="spin"></i>{tab.kind === "file" ? `Reading ${fileName(tab.path ?? "")}` : `Decompiling ${ws.className(tab.cls ?? "")}`}</div>
+          </div>
+        {/each}
+      </div>
+      {#if tab.kind === "class"}
+        <div class="views">
+          <div class="seg" role="radiogroup" aria-label="View">
+            <button role="radio" aria-checked={tab.view !== "smali"} class:on={tab.view !== "smali"} onclick={() => tab.view === "smali" && ws.setView("java")}>Java</button>
+            <button role="radio" aria-checked={tab.view === "smali"} class:on={tab.view === "smali"} onclick={() => ws.setView("smali")}>{lowView.label}</button>
+          </div>
+          {#if javaViews.length > 1 && tab.view !== "smali"}
+            <button class="pick" title="Decompiler" onclick={pickDecompiler}>{tab.view === "vineflower" ? "Vineflower" : "jadx"}<Icon name="chevronDown" size={14} /></button>
+          {/if}
+          {#if !prefs.inspector}
+            <button class="ib" title="Show the inspector (Ctrl Alt I)" onclick={toggleInspector}><Icon name="layoutSidebarRight" size={16} /></button>
           {/if}
         </div>
       {/if}
     </div>
 
+    <div class="editor">
+      {#if tab.kind === "overview"}
+        <OverviewPage {ws} {home} onfilter={(p) => ((side = "classes"), (filter = p))} onreopen={reopen} />
+      {:else if doc}
+        {#key `${tab.key}:${tab.view}`}
+          <CodeView
+            bind:this={code}
+            {doc}
+            caret={tab.caret}
+            reveal={tab.reveal}
+            top={tab.top}
+            seen={tab.seen}
+            fontSize={prefs.fontSize}
+            notes={tab.kind === "class" ? notes : undefined}
+            renamed={isRenamedNode}
+            bookmarks={bookmarksHere}
+            onfollow={follow}
+            oncaret={(p) => (tab.caret = p)}
+            oncontext={onCodeContext}
+            onscrolled={(px) => (tab.top = px)}
+            onrevealed={(n) => (tab.seen = n)}
+          />
+        {/key}
+      {:else if entry?.state === "image"}
+        <div class="image">
+          <img src={entry.src} alt={fileName(tab.path ?? "")} onload={(e) => (imageSize = `${(e.currentTarget as HTMLImageElement).naturalWidth} x ${(e.currentTarget as HTMLImageElement).naturalHeight}`)} />
+          <p>{imageSize}<span class="dim">{fmtSize(entry.size)}</span></p>
+        </div>
+      {:else if entry?.state === "error"}
+        <div class="state err">
+          <p>Couldn't {tab.kind === "file" ? "read" : "decompile"} {tab.kind === "file" ? fileName(tab.path ?? "") : ws.className(tab.cls ?? "")}</p>
+          <pre>{entry.message}</pre>
+          {#each views.filter((v) => v.view !== tab.view) as v (v.view)}
+            <button class="lnk" onclick={() => ws.setView(v.view)}>Show {v.label} instead</button>
+          {/each}
+        </div>
+      {:else}
+        <div class="state"><i class="spin"></i>{tab.kind === "file" ? `Reading ${fileName(tab.path ?? "")}` : `Decompiling ${ws.className(tab.cls ?? "")}`}</div>
+      {/if}
+      {#if tab.kind === "file" && entry?.state === "ready" && entry.note}<p class="filenote">{entry.note}</p>{/if}
+    </div>
+
     {#if ws.usages}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="split h" onpointerdown={(e) => drag(e, "usages")}></div>
+      <div class="split" onpointerdown={(e) => drag(e, "usages")}></div>
       <div class="usages" style:height="{prefs.usages}px">
         <UsagesPanel {ws} view={ws.usages} onopen={openUsage} onclose={() => (ws.usages = null)} />
       </div>
     {/if}
-  </div>
+  </section>
+
+  {#if inspecting}
+    <Inspector
+      {ws}
+      {doc}
+      {tab}
+      onusage={openUsage}
+      onallusages={(n) => ws.findUsages(n)}
+      onjump={jump}
+      onrename={rename}
+      oncomment={comment}
+      onbookmark={bookmark}
+      oncopy={copy}
+      onclose={toggleInspector}
+    />
+  {/if}
 </div>
 
 {#if ctx}
@@ -714,123 +815,86 @@
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: var(--side) 0 minmax(0, 1fr);
+    grid-template-columns: 50px var(--side) minmax(0, 1fr);
+    gap: 6px;
+    padding-right: 6px;
   }
-  .side {
+  .bench.insp {
+    grid-template-columns: 50px var(--side) minmax(0, 1fr) 362px;
+  }
+  .rail {
     display: flex;
     flex-direction: column;
-    min-height: 0;
-    min-width: 0;
-    background: var(--side);
+    align-items: center;
+    gap: 4px;
+    padding-top: 2px;
   }
-  .split {
+  .rail button {
     position: relative;
-    z-index: 4;
-  }
-  .split.v {
-    cursor: col-resize;
-    width: 0;
-    border-left: 1px solid var(--line);
-  }
-  .split.v::after {
-    content: "";
-    position: absolute;
-    inset: 0 -4px;
-  }
-  .split.h {
-    flex: none;
-    height: 0;
-    cursor: row-resize;
-    border-top: 1px solid var(--line);
-  }
-  .split.h::after {
-    content: "";
-    position: absolute;
-    inset: -4px 0;
-  }
-  .modes {
-    display: flex;
-    gap: 2px;
-    height: 36px;
-    flex: none;
-    align-items: center;
-    padding: 0 8px;
-    border-bottom: 1px solid var(--line);
-  }
-  .modes button {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    height: 26px;
-    padding: 0 9px;
-    border-radius: 5px;
-    font-size: 12.5px;
-    color: var(--muted);
-  }
-  .modes button:hover {
-    color: var(--text);
-  }
-  .modes button.on {
-    color: var(--text-hi);
-    background: var(--lift);
-  }
-  .badge {
-    font: 10.5px var(--font-code);
-    color: var(--text-3);
-  }
-  .filter {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 8px 10px 6px;
-    height: 28px;
-    padding: 0 6px 0 9px;
-    border-radius: 6px;
-    background: var(--pane);
-    color: var(--text-3);
-    box-shadow: inset 0 0 0 1px var(--line-2);
-  }
-  .filter:focus-within {
-    box-shadow: inset 0 0 0 1px var(--beam-shade);
-  }
-  .filter input {
-    flex: 1;
-    min-width: 0;
-    border: 0;
-    outline: none;
-    background: transparent;
-    font-size: 12.5px;
-    color: var(--text-hi);
-  }
-  .filter input::placeholder {
-    color: var(--text-3);
-  }
-  .clear {
+    width: 38px;
+    height: 38px;
     display: grid;
     place-items: center;
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
+    border-radius: 10px;
+    border: 1px solid transparent;
     color: var(--text-3);
   }
-  .clear:hover {
+  .rail button:hover {
+    color: var(--text);
+    background: var(--hover);
+  }
+  .rail button.on {
     color: var(--text-hi);
-    background: var(--lift-2);
+    background: var(--panel);
+    border-color: var(--edge);
+  }
+  .badge {
+    position: absolute;
+    top: 3px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--ink);
+    color: var(--on-accent);
+    font: 600 10.5px/16px var(--font-ui);
+  }
+  .side {
+    position: relative;
+  }
+  .grip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: -5px;
+    width: 8px;
+    cursor: col-resize;
+    z-index: 4;
+  }
+  .clear {
+    width: 22px;
+    height: 22px;
   }
 
   .main {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
+    background: var(--editor);
   }
   .tabs {
-    display: flex;
-    align-items: stretch;
-    height: 36px;
+    height: 44px;
     flex: none;
-    background: var(--ground);
-    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 6px;
+    background: var(--tabs);
+  }
+  .tablist {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 2px;
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -838,32 +902,30 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    max-width: 220px;
-    padding: 0 6px 0 14px;
-    border-right: 1px solid var(--line);
-    font-size: 12.5px;
-    color: var(--muted);
+    flex: none;
+    max-width: 230px;
+    height: 32px;
+    padding: 0 6px 0 11px;
+    border-radius: 8px;
+    color: var(--text-3);
     cursor: pointer;
     white-space: nowrap;
-    user-select: none;
   }
   .tab:hover {
-    color: var(--text);
+    color: var(--text-2);
+    background: var(--hover);
   }
   .tab.on {
-    background: var(--pane);
+    background: var(--editor);
     color: var(--text-hi);
-    margin-bottom: -1px;
+    box-shadow: 0 0 0 1px var(--edge);
   }
   .tl {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .tl.renamed {
-    font-style: italic;
-  }
-  .tv {
-    font: 10.5px var(--font-code);
+  .vt {
+    font: 11.5px var(--font-code);
     color: var(--text-3);
   }
   .tx {
@@ -871,34 +933,58 @@
     place-items: center;
     width: 20px;
     height: 20px;
-    border-radius: 4px;
-    color: var(--faint);
-    opacity: 0;
+    border-radius: 5px;
+    color: var(--text-3);
+    visibility: hidden;
   }
   .tab:hover .tx,
   .tab.on .tx {
-    opacity: 1;
+    visibility: visible;
   }
   .tx:hover {
-    background: var(--lift-2);
+    background: var(--hover);
     color: var(--text-hi);
   }
   .tab:not(:has(.tx)) {
-    padding-right: 14px;
+    padding-right: 12px;
   }
-  .tabfill {
-    flex: 1;
-  }
-  .ib {
+  .views {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     flex: none;
-    width: 36px;
-    display: grid;
-    place-items: center;
-    color: var(--faint);
   }
-  .ib:hover,
-  .ib.on {
+  .seg {
+    display: flex;
+    padding: 3px;
+    border-radius: 9px;
+    background: var(--frame);
+  }
+  .seg button {
+    padding: 3px 11px;
+    border-radius: 6px;
+    color: var(--text-3);
+  }
+  .seg button:hover {
+    color: var(--text);
+  }
+  .seg button.on {
+    background: var(--panel);
+    color: var(--text-hi);
+    box-shadow: 0 0 0 1px var(--edge);
+  }
+  .pick {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 30px;
+    padding: 0 7px 0 10px;
+    border-radius: 8px;
     color: var(--text-2);
+  }
+  .pick:hover {
+    background: var(--hover);
+    color: var(--text-hi);
   }
 
   .editor {
@@ -906,74 +992,19 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    background: var(--pane);
   }
-  .crumbs {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 34px;
+  .split {
     flex: none;
-    padding: 0 10px 0 16px;
+    height: 7px;
+    margin-top: -3px;
+    cursor: row-resize;
+    position: relative;
+    z-index: 4;
     border-bottom: 1px solid var(--line);
-    font-size: 12.5px;
-    white-space: nowrap;
   }
-  .pk {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font: 11.5px var(--font-code);
-    color: var(--text-3);
-  }
-  .cn {
-    font-weight: 600;
-    color: var(--text-hi);
-  }
-  .seg {
-    margin-left: auto;
-    display: flex;
-    padding: 2px;
-    border-radius: 6px;
-    background: var(--ground);
-    box-shadow: inset 0 0 0 1px var(--line);
-  }
-  .seg button {
-    height: 22px;
-    padding: 0 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    color: var(--muted);
-  }
-  .seg button.on {
-    background: var(--lift-2);
-    color: var(--text-hi);
-  }
-  .codewrap {
-    flex: 1;
-    min-width: 0;
-    min-height: 0;
-    display: flex;
-  }
-  .outline {
-    width: 260px;
+  .usages {
     flex: none;
-    display: flex;
-    flex-direction: column;
     min-height: 0;
-    background: var(--side);
-    border-left: 1px solid var(--line);
-  }
-  .oh {
-    padding: 10px 12px 4px;
-    font-size: 11.5px;
-    font-weight: 600;
-    color: var(--text-3);
-  }
-  @media (max-width: 1280px) {
-    .outline {
-      display: none;
-    }
   }
   .state {
     flex: 1;
@@ -990,14 +1021,14 @@
   }
   .state p {
     margin: 0;
-    color: var(--error);
+    color: var(--bad);
     font-weight: 500;
   }
   .state pre {
     margin: 0;
     max-width: 100%;
     white-space: pre-wrap;
-    font: 12px var(--font-code);
+    font: 12.5px var(--font-code);
     color: var(--text-2);
   }
   .lnk {
@@ -1008,13 +1039,12 @@
   .lnk:hover {
     color: var(--text-hi);
   }
-  .usages {
+  .filenote {
     flex: none;
-    min-height: 0;
-  }
-  .note {
-    font-size: 12px;
-    color: var(--obf);
+    margin: 0;
+    padding: 8px 16px;
+    border-top: 1px solid var(--line);
+    color: var(--warn);
   }
   .image {
     flex: 1;
@@ -1031,14 +1061,14 @@
     max-width: 100%;
     max-height: calc(100% - 40px);
     min-width: 32px;
-    background: var(--shelf);
-    border-radius: 4px;
+    background: var(--panel);
+    border-radius: 6px;
   }
   .image p {
     display: flex;
     gap: 12px;
     margin: 0;
-    font: 12px var(--font-code);
+    font: 12.5px var(--font-code);
     color: var(--text-2);
   }
   .dim {
