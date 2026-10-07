@@ -176,6 +176,35 @@ export interface Overview {
   signing?: { schemes: string[]; certs: Cert[] };
   manifest?: string;
   android?: AndroidInfo;
+  plugins?: PluginInfo[];
+  mixinConfigs?: { file: string; package: string; classes: { cls: string; side: "both" | "client" | "server" }[] }[];
+  /** Mixin class (Java name) to the classes it changes. */
+  mixinTargets?: Record<string, string[]>;
+  entryClasses?: { cls: string; kind: "neoforge" | "forge" | "servlet" | "filter" | "listener" | "spring-boot" | "burp"; detail: string[] }[];
+  services?: { service: string; providers: string[] }[];
+  artifacts?: { group: string; artifact: string; version?: string }[];
+  jars?: { path: string; size: number }[];
+  web?: {
+    servlets: { name?: string; cls?: string; jsp?: string; urls: string[] }[];
+    filters: { name?: string; cls?: string; urls: string[] }[];
+    listeners: string[];
+  };
+}
+
+/** A mod or plugin descriptor such as fabric.mod.json or plugin.yml. Class names are Java names. */
+export interface PluginInfo {
+  loader: "fabric" | "quilt" | "neoforge" | "forge" | "bukkit" | "paper" | "bungeecord" | "velocity";
+  file: string;
+  id?: string;
+  name?: string;
+  version?: string;
+  description?: string;
+  authors: string[];
+  entries: { kind: string; cls: string; member?: string }[];
+  depends?: { id: string; version: string }[];
+  environment?: string;
+  license?: string;
+  apiVersion?: string;
 }
 
 export interface ExportResult {

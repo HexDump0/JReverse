@@ -1,6 +1,6 @@
 <script lang="ts">
   // The first tab: what this file is, what stands out, and where to start reading.
-  import type { Cert, Component } from "$lib/engine";
+  import type { Cert, Component, PluginInfo } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
   import { fmtN, fmtSize, kindLabel, tildify } from "$lib/format";
   import { say } from "$lib/status.svelte";
@@ -28,7 +28,64 @@
 
   const o = $derived(ws.info);
   const a = $derived(o?.android);
-  const makeup = $derived(groupClasses(ws.classes, a?.package));
+  const plugins = $derived(o?.plugins ?? []);
+  const plugin = $derived(plugins[0]);
+  const jm = $derived(o?.jarManifest ?? {});
+
+  /** One row per way into the code: manifest classes, descriptor entrypoints, annotated classes, web.xml. */
+  interface Entry {
+    cls: string;
+    label: string;
+    detail?: string;
+  }
+  const entries = $derived.by((): Entry[] => {
+    if (!o || a) return [];
+    const out: Entry[] = [];
+    const MANIFEST: [string, string][] = [
+      ["Main-Class", "main class"],
+      ["Start-Class", "Spring Boot start class"],
+      ["Premain-Class", "agent, loaded at startup"],
+      ["Agent-Class", "agent, loaded on attach"],
+      ["Launcher-Agent-Class", "launcher agent"],
+      ["Plugin-Class", "plugin class"],
+    ];
+    for (const [key, label] of MANIFEST) if (jm[key]) out.push({ cls: jm[key], label });
+    for (const p of plugins) {
+      for (const e of p.entries) {
+        const label = p.loader === "fabric" || p.loader === "quilt" ? `${e.kind} entrypoint` : "plugin main class";
+        out.push({ cls: e.cls, label, detail: e.member });
+      }
+    }
+    const ENTRY_LABEL: Record<string, string> = {
+      neoforge: "@Mod",
+      forge: "@Mod",
+      servlet: "servlet",
+      filter: "filter",
+      listener: "listener",
+      "spring-boot": "@SpringBootApplication",
+      burp: "Burp extension",
+    };
+    for (const e of o.entryClasses ?? []) {
+      // @Mod carries the mod id; servlets and filters their URL patterns.
+      const detail = e.kind.endsWith("forge") ? e.detail[0] && `mod id ${e.detail[0]}` : e.detail.join(", ");
+      out.push({ cls: e.cls, label: ENTRY_LABEL[e.kind] ?? e.kind, detail: detail || undefined });
+    }
+    for (const s of o.web?.servlets ?? []) if (s.cls) out.push({ cls: s.cls, label: "servlet", detail: s.urls.join(", ") || undefined });
+    for (const f of o.web?.filters ?? []) if (f.cls) out.push({ cls: f.cls, label: "filter", detail: f.urls.join(", ") || undefined });
+    for (const l of o.web?.listeners ?? []) out.push({ cls: l, label: "listener" });
+    const seen = new Set<string>();
+    return out.filter((e) => !seen.has(e.cls + e.label) && seen.add(e.cls + e.label));
+  });
+
+  /** The package the file's own code lives in, judged by its package name or its entry points. */
+  const appPackage = $derived.by(() => {
+    if (a?.package) return a.package;
+    const first = entries[0]?.cls;
+    if (!first || !first.includes(".")) return undefined;
+    const parts = first.split(".").slice(0, -1);
+    return parts.slice(0, Math.min(parts.length, 3)).join(".");
+  });
+  const makeup = $derived(groupClasses(ws.classes, appPackage));
   const libraries = $derived(makeup.groups.filter((g) => g.library));
 
   /** The class map: the app's own code, its obfuscated part, the Kotlin runtime, everything else known. */
@@ -49,7 +106,7 @@
         obfPkgs.set(pkg, (obfPkgs.get(pkg) ?? 0) + 1);
       } else parts.app.n++;
     }
-    parts.app.prefix = a?.package ?? makeup.groups.find((g) => !g.library)?.prefix.replaceAll("/", ".") ?? "";
+    parts.app.prefix = appPackage ?? makeup.groups.find((g) => !g.library)?.prefix.replaceAll("/", ".") ?? "";
     parts.obf.prefix = [...obfPkgs.entries()].sort((x, y) => y[1] - x[1])[0]?.[0].replaceAll("/", ".") ?? "";
     const list = Object.values(parts).filter((p) => p.n > 0);
     // Widths with a floor, so a small part stays visible and clickable.
@@ -58,8 +115,69 @@
     return list.map((p, i) => ({ ...p, w: floor[i] / sum }));
   });
 
-  const iconFor = $derived(ws.opened.kind === "apk" || ws.opened.kind === "aab" ? "android" : ws.opened.kind === "dex" ? "fileCode" : "coffee");
-  const title = $derived(a?.label && !a.label.startsWith("@") ? a.label : ws.name);
+  const LOADER: Record<PluginInfo["loader"], [string, string]> = {
+    fabric: ["Fabric", "Fabric mod"],
+    quilt: ["Quilt", "Quilt mod"],
+    neoforge: ["NeoForge", "NeoForge mod"],
+    forge: ["Forge", "Forge mod"],
+    bukkit: ["Bukkit", "Bukkit plugin"],
+    paper: ["Paper", "Paper plugin"],
+    bungeecord: ["BungeeCord", "BungeeCord plugin"],
+    velocity: ["Velocity", "Velocity plugin"],
+  };
+
+  const isWeb = $derived(!!o?.web || entries.some((e) => e.label === "servlet"));
+
+  /** What sort of program this is, from the strongest evidence the file has. */
+  const typeName = $derived.by(() => {
+    if (plugin) return LOADER[plugin.loader][1];
+    if (o?.entryClasses?.some((e) => e.kind === "burp")) return "Burp extension";
+    if (isWeb) return "Web app";
+    if (jm["Start-Class"] || o?.entryClasses?.some((e) => e.kind === "spring-boot")) return "Spring Boot app";
+    if (jm["Premain-Class"] || jm["Agent-Class"]) return "Java agent";
+    if (jm["Main-Class"]) return "Runnable JAR";
+    return kindLabel(ws.opened.kind);
+  });
+
+  const iconFor = $derived(
+    ws.opened.kind === "apk" || ws.opened.kind === "aab"
+      ? "android"
+      : ws.opened.kind === "dex"
+        ? "fileCode"
+        : plugin
+          ? "puzzle"
+          : isWeb
+            ? "world"
+            : "coffee",
+  );
+  const title = $derived(a?.label && !a.label.startsWith("@") ? a.label : (plugin?.name ?? jm["Implementation-Title"] ?? ws.name));
+  const subtitle = $derived(a?.package ?? plugin?.id);
+  const version = $derived(a ? a.versionName : (plugin?.version ?? jm["Implementation-Version"]));
+  const minecraft = $derived(plugin?.depends?.find((d) => d.id === "minecraft")?.version);
+  const otherDeps = $derived((plugin?.depends ?? []).filter((d) => !["minecraft", "java", "fabricloader", "quilt_loader"].includes(d.id)));
+  const ENVIRONMENT: Record<string, string> = { client: "Client only", server: "Server only", "*": "Client and server" };
+
+  /** Mixin classes with what they change: from the configs, with targets read from the classes. */
+  const mixins = $derived.by(() => {
+    const targets = o?.mixinTargets ?? {};
+    const rows = (o?.mixinConfigs ?? []).flatMap((c) => c.classes.map((m) => ({ cls: m.cls, side: m.side, targets: targets[m.cls] ?? [] })));
+    const listed = new Set(rows.map((r) => r.cls));
+    for (const [cls, t] of Object.entries(targets)) if (!listed.has(cls)) rows.push({ cls, side: "both", targets: t });
+    return rows;
+  });
+  const changedClasses = $derived(new Set(mixins.flatMap((m) => m.targets)).size);
+  const allProviders = $derived((o?.services ?? []).flatMap((s) => s.providers.map((p) => ({ service: s.service, cls: p }))));
+  // Bundled libraries register their own services; the file's own ones are what you came for.
+  const providers = $derived(allProviders.filter((p) => !libraryOf(classId(p.cls))));
+  /** Fabric's production names (`class_1308`), which only a mappings file turns into real ones. */
+  const intermediary = $derived(mixins.some((m) => m.targets.some((t) => /\.class_\d+/.test(t))));
+  const jars = $derived(o?.jars ?? []);
+  const artifacts = $derived(o?.artifacts ?? []);
+
+  let allEntries = $state(false);
+  let allMixins = $state(false);
+  let allServices = $state(false);
+  let allBundled = $state(false);
 
   const LEVEL_ORDER: Record<PermissionLevel, number> = { dangerous: 0, special: 1, custom: 2, normal: 3 };
   const permissions = $derived(
@@ -121,10 +239,10 @@
     return f;
   });
 
-  const mainClass = $derived(o?.jarManifest?.["Main-Class"] ?? o?.jarManifest?.["Start-Class"]);
-
   const classId = (javaName: string | undefined) => (javaName ? javaName.replaceAll(".", "/") : "");
-  const has = (javaName: string | undefined) => !!javaName && ws.byId.has(classId(javaName));
+  /** Whether the class, or the top-level class an inner one sits in, is in this file. */
+  const has = (javaName: string | undefined) => !!javaName && ws.byId.has(classId(javaName).split("$")[0]);
+  const simple = (javaName: string) => javaName.slice(javaName.lastIndexOf(".") + 1);
 
   function open(javaName: string | undefined) {
     if (has(javaName)) ws.openClass(classId(javaName));
@@ -151,23 +269,26 @@
   );
 </script>
 
+{#snippet cls(name: string, label: string = name)}{#if has(name)}<button class="cl" onclick={() => open(name)}>{label}</button>{:else}{label}{/if}{/snippet}
+
 <div class="page selectable">
   <div class="in">
     <header class="ident">
       <span class="appicon"><Icon name={iconFor} size={26} /></span>
       <div class="who">
         <h1>{title}</h1>
-        {#if a?.package}<p class="pk">{a.package}</p>{:else}<p class="pk" title={ws.path}>{tildify(ws.path, home)}</p>{/if}
+        {#if subtitle}<p class="pk">{subtitle}</p>{:else}<p class="pk" title={ws.path}>{tildify(ws.path, home)}</p>{/if}
       </div>
       <dl class="facts">
-        {#if a?.versionName || a?.versionCode}
-          <div><dt>Version</dt><dd>{a.versionName ?? ""}{#if a.versionCode}{" "}<span class="dim">({a.versionCode})</span>{/if}</dd></div>
+        {#if version || a?.versionCode}
+          <div><dt>Version</dt><dd>{version ?? ""}{#if a?.versionCode}{" "}<span class="dim">({a.versionCode})</span>{/if}</dd></div>
         {/if}
         {#if a?.minSdk || a?.targetSdk}
           <div><dt>SDK</dt><dd>{a.minSdk ?? "?"} to {a.targetSdk ?? "?"}</dd></div>
         {:else}
-          <div><dt>Type</dt><dd>{kindLabel(ws.opened.kind)}</dd></div>
+          <div><dt>Type</dt><dd>{typeName}</dd></div>
         {/if}
+        {#if minecraft}<div><dt>Minecraft</dt><dd>{minecraft}</dd></div>{/if}
         {#if o}<div><dt>Size</dt><dd>{fmtSize(o.size)}</dd></div>{/if}
         <div><dt>Classes</dt><dd>{fmtN(ws.classes.length)}</dd></div>
         {#if o && !a}<div><dt>Methods</dt><dd>{fmtN(o.methods)}</dd></div>{/if}
@@ -249,24 +370,100 @@
           </section>
         {/if}
 
+        {#each plugins as p (p.file + (p.id ?? ""))}
+          <section>
+            <h2>{LOADER[p.loader][1].endsWith(" mod") ? "Mod" : "Plugin"}</h2>
+            {#if p.description}<p class="desc">{p.description}</p>{/if}
+            <dl class="kv">
+              <dt>Loader</dt>
+              <dd>{LOADER[p.loader][0]}{#if p.apiVersion}<span class="dim">API {p.apiVersion}</span>{/if}</dd>
+              {#if p !== plugin && p.id}<dt>ID</dt><dd class="mono">{p.id}</dd>{/if}
+              {#if p !== plugin && p.version}<dt>Version</dt><dd>{p.version}</dd>{/if}
+              {#if p.authors.length}<dt>{p.authors.length === 1 ? "Author" : "Authors"}</dt><dd>{p.authors.join(", ")}</dd>{/if}
+              {#if p.environment && ENVIRONMENT[p.environment]}<dt>Runs on</dt><dd>{ENVIRONMENT[p.environment]}</dd>{/if}
+              {#if p.license}<dt>License</dt><dd>{p.license}</dd>{/if}
+            </dl>
+            {#if p === plugin && otherDeps.length}
+              <h3>Depends on <span class="n">{otherDeps.length}</span></h3>
+              {#each otherDeps as d (d.id)}
+                <div class="tr"><span class="a mono">{d.id}</span><span class="b">{d.version === "*" ? "any version" : d.version}</span></div>
+              {/each}
+            {/if}
+            <button class="more" onclick={() => ws.openFile(p.file)}>Open {p.file.slice(p.file.lastIndexOf("/") + 1)}</button>
+          </section>
+        {/each}
+
+        {#if entries.length}
+          <section>
+            <h2>Entry points <span class="n">{entries.length}</span><span class="r">where the code starts running</span></h2>
+            {#each allEntries ? entries : entries.slice(0, COMPONENTS_SHOWN) as e (e.cls + e.label)}
+              <div class="tr">
+                <span class="a mono" title={e.cls}>{@render cls(e.cls)}</span>
+                {#if e.detail}<span class="dim mono detail" title={e.detail}>{e.detail}</span>{/if}
+                <span class="b">{e.label}</span>
+              </div>
+            {/each}
+            {#if entries.length > COMPONENTS_SHOWN}
+              <button class="more" onclick={() => (allEntries = !allEntries)}>{allEntries ? "Show fewer" : `Show all ${entries.length}`}</button>
+            {/if}
+          </section>
+        {/if}
+
+        {#if mixins.length}
+          <section>
+            <h2>Mixins <span class="n">{mixins.length}</span>{#if changedClasses}<span class="r">change {changedClasses} {changedClasses === 1 ? "class" : "classes"}</span>{/if}</h2>
+            {#each allMixins ? mixins : mixins.slice(0, COMPONENTS_SHOWN) as m (m.cls)}
+              <div class="tr">
+                <span class="a mono" title={m.cls}>{@render cls(m.cls, simple(m.cls))}</span>
+                {#if m.side !== "both"}<span class="flag">{m.side}</span>{/if}
+                <span class="b mono" title={m.targets.join(", ")}>{m.targets.map(simple).join(", ")}</span>
+              </div>
+            {/each}
+            {#if mixins.length > COMPONENTS_SHOWN}
+              <button class="more" onclick={() => (allMixins = !allMixins)}>{allMixins ? "Show fewer" : `Show all ${mixins.length}`}</button>
+            {/if}
+            {#if intermediary}<p class="note">Game classes are named as in Fabric's intermediary mappings, the way the mod ships.</p>{/if}
+          </section>
+        {/if}
+
+        {#if providers.length}
+          <section>
+            <h2>Services <span class="n">{providers.length}</span><span class="r">{allProviders.length > providers.length ? `${allProviders.length - providers.length} more from libraries` : "from META-INF/services"}</span></h2>
+            {#each allServices ? providers : providers.slice(0, COMPONENTS_SHOWN) as p (p.service + p.cls)}
+              <div class="tr">
+                <span class="a mono" title={p.cls}>{@render cls(p.cls, simple(p.cls))}</span>
+                <span class="b mono" title={p.service}>{simple(p.service)}</span>
+              </div>
+            {/each}
+            {#if providers.length > COMPONENTS_SHOWN}
+              <button class="more" onclick={() => (allServices = !allServices)}>{allServices ? "Show fewer" : `Show all ${providers.length}`}</button>
+            {/if}
+          </section>
+        {/if}
+
+        {#if jars.length || artifacts.length}
+          <section>
+            <h2>Bundled <span class="n">{jars.length + artifacts.length}</span><span class="r">code shipped inside this file</span></h2>
+            {#each allBundled ? jars : jars.slice(0, COMPONENTS_SHOWN) as j (j.path)}
+              <div class="tr"><span class="a mono" title={j.path}>{j.path.slice(j.path.lastIndexOf("/") + 1)}</span><span class="b">{fmtSize(j.size)}</span></div>
+            {/each}
+            {#each allBundled ? artifacts : artifacts.slice(0, Math.max(0, COMPONENTS_SHOWN - jars.length)) as m (m.group + m.artifact)}
+              <div class="tr"><span class="a mono" title="{m.group}:{m.artifact}"><span class="dim">{m.group}:</span>{m.artifact}</span><span class="b">{m.version ?? ""}</span></div>
+            {/each}
+            {#if jars.length + artifacts.length > COMPONENTS_SHOWN}
+              <button class="more" onclick={() => (allBundled = !allBundled)}>{allBundled ? "Show fewer" : `Show all ${jars.length + artifacts.length}`}</button>
+            {/if}
+          </section>
+        {/if}
+
         {#if o.jarManifest || o.javaVersions?.length}
           <section>
             <h2>Java</h2>
             <dl class="kv">
-              {#if mainClass}
-                <dt>Main class</dt>
-                <dd class="mono">{#if has(mainClass)}<button class="cl" onclick={() => open(mainClass)}>{mainClass}</button>{:else}{mainClass}{/if}</dd>
-              {/if}
-              {#each ["Premain-Class", "Agent-Class", "Launcher-Agent-Class", "Plugin-Class"] as key (key)}
-                {#if o.jarManifest?.[key]}
-                  <dt>{key.replace("-Class", "").replace("-", " ")}</dt>
-                  <dd class="mono">{#if has(o.jarManifest[key])}<button class="cl" onclick={() => open(o.jarManifest?.[key])}>{o.jarManifest[key]}</button>{:else}{o.jarManifest[key]}{/if}</dd>
-                {/if}
-              {/each}
               {#if o.javaVersions?.length}
                 <dt>Bytecode</dt>
                 <dd>
-                  {#each o.javaVersions as v, i (v.java)}{#if i}, {/if}Java {v.java}{#if o.javaVersions.length > 1}<span class="dim">{fmtN(v.classes)}</span>{/if}{/each}
+                  {#each o.javaVersions as v, i (v.java)}{#if i}{", "}{/if}Java {v.java}{#if o.javaVersions.length > 1}<span class="dim">{fmtN(v.classes)}</span>{/if}{/each}
                 </dd>
               {/if}
               {#each [["Title", "Implementation-Title"], ["Version", "Implementation-Version"], ["Vendor", "Implementation-Vendor"], ["Module", "Automatic-Module-Name"], ["Built with", "Build-Jdk-Spec"], ["Created by", "Created-By"]] as [label, key] (key)}
@@ -559,6 +756,22 @@
   h3 .n {
     font-weight: 400;
     color: var(--text-3);
+  }
+  .note {
+    margin: 10px 0 0;
+    font-size: 12.5px;
+    color: var(--text-3);
+  }
+  .desc {
+    margin: 0 0 12px;
+    color: var(--text-2);
+    line-height: 1.55;
+  }
+  .tr .detail {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .finding {
     display: flex;
