@@ -92,6 +92,20 @@ verified); for APK/AAR the decoded `manifest` and `android` (package,
 versions, SDKs, permissions, application flags and `components` with
 `exported`, `launcher`, intent actions and deep `links`).
 
+For JAR/AAR also, when present: `plugins` (mod and plugin descriptors:
+`fabric.mod.json`, `quilt.mod.json`, `[neoforge.]mods.toml`, `plugin.yml`,
+`paper-plugin.yml`, `bungee.yml`, `velocity-plugin.json`, each `{loader,
+file, id?, name?, version?, description?, authors, entries: [{kind, cls,
+member?}], depends?}`), `mixinConfigs: [{file, package, classes: [{cls,
+side}]}]`, `services: [{service, providers}]` from `META-INF/services`,
+`artifacts: [{group, artifact, version}]` from `pom.properties`, bundled
+`jars: [{path, size}]`, `web` (`web.xml`: `servlets`, `filters` as `{name,
+cls, urls}`, `listeners`). For JAR and class input: `mixinTargets` (mixin
+class to the classes it targets) and `entryClasses: [{cls, kind, detail}]`
+for entry points found by annotation or interface (`neoforge`, `forge`,
+`servlet`, `filter`, `listener`, `spring-boot`, `burp`). Class names in
+all of these are Java names with `$` for inner classes.
+
 **Files.** `file` returns `kind` `text` (binary XML decoded; plain text up to
 4 MB), `image` (`data` is base64, with `mime`), `binary` (the first 64 KB as
 base64 `data`) or `table` for `resources.arsc`, whose `children` are the

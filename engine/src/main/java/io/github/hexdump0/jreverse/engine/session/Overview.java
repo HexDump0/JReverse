@@ -77,7 +77,10 @@ public final class Overview {
 		if (session.kind() == InputKind.CLASS) {
 			o.add("javaVersions", javaVersions(Map.of(classVersion(path), 1)));
 		} else if (session.kind() != InputKind.DEX) {
-			zip(o, path);
+			zip(o, path, session.kind());
+		}
+		if (session.kind() == InputKind.JAR || session.kind() == InputKind.CLASS) {
+			Jvm.code(jadx.allNodes(), o);
 		}
 
 		String manifest = jadx.manifest();
@@ -92,7 +95,7 @@ public final class Overview {
 		return o;
 	}
 
-	private static void zip(JsonObject o, Path path) {
+	private static void zip(JsonObject o, Path path, InputKind kind) {
 		JsonArray dex = new JsonArray();
 		JsonArray libs = new JsonArray();
 		Map<Integer, Integer> versions = new TreeMap<>();
@@ -134,13 +137,19 @@ public final class Overview {
 				o.add("javaVersions", javaVersions(versions));
 			}
 			ZipEntry mf = zip.getEntry("META-INF/MANIFEST.MF");
+			String implVersion = null;
 			if (mf != null) {
 				try (InputStream in = zip.getInputStream(mf)) {
 					JsonObject attrs = jarManifest(new Manifest(in));
 					if (!attrs.isEmpty()) {
 						o.add("jarManifest", attrs);
 					}
+					implVersion = attrs.has("Implementation-Version") ? attrs.get("Implementation-Version").getAsString() : null;
 				}
+			}
+			// In an APK these files come from bundled libraries and say little about the app itself.
+			if (kind == InputKind.JAR || kind == InputKind.AAR) {
+				Jvm.archive(zip, o, implVersion);
 			}
 			Signing.Result sig = Signing.read(path, zip);
 			JsonObject s = new JsonObject();

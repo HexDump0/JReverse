@@ -149,6 +149,77 @@ class OverviewTest {
 		assertEquals("com.example.files", comps.get(3).getAsJsonObject().get("authorities").getAsString());
 	}
 
+	@Test
+	void jvmDescriptors() throws Exception {
+		Path jar = tmp.resolve("mod.jar");
+		Fixtures.zip(jar,
+				"fabric.mod.json", """
+						{"id": "demo", "name": "Demo", "version": "1.2", "authors": ["ann", {"name": "bo"}],
+						 "entrypoints": {"main": ["demo.Main"], "client": [{"value": "demo.Client::init"}]},
+						 "depends": {"minecraft": "1.21.x"}}
+						""".getBytes(),
+				"demo.mixins.json", """
+						{"package": "demo.mixin", "mixins": ["A"], "client": ["B"]}
+						""".getBytes(),
+				"demo-refmap.mixins.json", "{}".getBytes(),
+				"META-INF/services/java.sql.Driver", "# comment\ndemo.Driver\n\n".getBytes(),
+				"META-INF/maven/com.acme/util/pom.properties", "groupId=com.acme\nartifactId=util\nversion=3.1\n".getBytes(),
+				"META-INF/jars/inner-1.0.jar", new byte[] {1, 2, 3},
+				"META-INF/neoforge.mods.toml", """
+						license = "MIT"
+						[[mods]]
+						modId = "demo"
+						version = "${file.jarVersion}"
+						displayName = "Demo NeoForge" # a comment
+						[[mixins]]
+						config = "demo.mixins.json"
+						""".getBytes(),
+				"plugin.yml", "name: Demo\nversion: '2.0'\nmain: demo.Plugin\nauthors: [ann, bo]\ncommands:\n  demo:\n    usage: /demo\n"
+						.getBytes(),
+				"WEB-INF/web.xml", """
+						<web-app xmlns="https://jakarta.ee/xml/ns/jakartaee">
+						  <servlet><servlet-name>api</servlet-name><servlet-class>demo.Api</servlet-class></servlet>
+						  <servlet-mapping><servlet-name>api</servlet-name><url-pattern>/api/*</url-pattern></servlet-mapping>
+						  <filter><filter-name>auth</filter-name><filter-class>demo.Auth</filter-class></filter>
+						  <listener><listener-class>demo.Boot</listener-class></listener>
+						</web-app>
+						""".getBytes());
+		JsonObject o = new JsonObject();
+		try (ZipFile zip = new ZipFile(jar.toFile())) {
+			Jvm.archive(zip, o, "9.9");
+		}
+		JsonArray plugins = o.getAsJsonArray("plugins");
+		assertEquals(3, plugins.size());
+		JsonObject fabric = plugins.get(0).getAsJsonObject();
+		assertEquals("fabric", fabric.get("loader").getAsString());
+		assertEquals("[\"ann\",\"bo\"]", fabric.get("authors").toString());
+		JsonArray entries = fabric.getAsJsonArray("entries");
+		assertEquals("demo.Main", entries.get(0).getAsJsonObject().get("cls").getAsString());
+		assertEquals("demo.Client", entries.get(1).getAsJsonObject().get("cls").getAsString());
+		assertEquals("init", entries.get(1).getAsJsonObject().get("member").getAsString());
+		JsonObject neo = plugins.get(1).getAsJsonObject();
+		assertEquals("Demo NeoForge", neo.get("name").getAsString());
+		assertEquals("9.9", neo.get("version").getAsString());
+		JsonObject bukkit = plugins.get(2).getAsJsonObject();
+		assertEquals("2.0", bukkit.get("version").getAsString());
+		assertEquals("demo.Plugin", bukkit.getAsJsonArray("entries").get(0).getAsJsonObject().get("cls").getAsString());
+		assertEquals(2, bukkit.getAsJsonArray("authors").size());
+
+		JsonArray mixins = o.getAsJsonArray("mixinConfigs");
+		assertEquals(1, mixins.size());
+		assertEquals("demo.mixin.B", mixins.get(0).getAsJsonObject().getAsJsonArray("classes").get(1).getAsJsonObject().get("cls")
+				.getAsString());
+		assertEquals("[\"demo.Driver\"]", o.getAsJsonArray("services").get(0).getAsJsonObject().get("providers").toString());
+		assertEquals("util", o.getAsJsonArray("artifacts").get(0).getAsJsonObject().get("artifact").getAsString());
+		assertEquals("META-INF/jars/inner-1.0.jar", o.getAsJsonArray("jars").get(0).getAsJsonObject().get("path").getAsString());
+		JsonObject web = o.getAsJsonObject("web");
+		JsonObject api = web.getAsJsonArray("servlets").get(0).getAsJsonObject();
+		assertEquals("demo.Api", api.get("cls").getAsString());
+		assertEquals("[\"/api/*\"]", api.get("urls").toString());
+		assertEquals("demo.Auth", web.getAsJsonArray("filters").get(0).getAsJsonObject().get("cls").getAsString());
+		assertEquals("demo.Boot", web.getAsJsonArray("listeners").get(0).getAsString());
+	}
+
 	/** A v2 block value with one signer whose signed data holds no digests and one certificate. */
 	private static byte[] v2Value(byte[] der) {
 		byte[] certs = prefixed(prefixed(der));
