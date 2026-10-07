@@ -9,6 +9,9 @@ an Android tool with JAR support. Reading only: no patching or bytecode editing,
 The screens adapt to what was opened (a Fabric mod, a WAR, a plain JAR, an APK). The owner
 rejected a "is this safe / what does it do" headline as slop: show facts people use (descriptors,
 entry points, strings, bundled libraries), not verdicts or detection scores.
+Keep it neutral and professional: support formats and ecosystems because many users have them, never
+because of what's on the owner's machine (a Burp extension check added that way was removed). Minecraft
+modding (Fabric, Forge/NeoForge, Bukkit and friends, Mixin) stays on purpose.
 
 ### Links come from jadx's code metadata, sent as flat spans (2026-10-03)
 `decompile` returns every identifier that names a class/method/field as `[line, col, len, node]`

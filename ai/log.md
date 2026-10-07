@@ -12,7 +12,7 @@ What was done. What's left. Anything the next agent must know.
 ## 2026-10-07 — claude-k2m — JVM-aware overview, copy formats, strings panel
 - Owner's direction (decisions.md): a tool for understanding compiled Java, for everyone, reading only.
 - Overview reads mod/plugin descriptors (Fabric, Quilt, NeoForge/Forge, Bukkit/Paper, Bungee, Velocity),
-  mixins and their targets, services, bundled jars and Maven artifacts, web.xml, Burp/servlet/@Mod entry classes.
+  mixins and their targets, services, bundled jars and Maven artifacts, web.xml, servlet/@Mod/Spring Boot entry classes.
 - Inspector "Copy as": Frida/Xposed/Smali for Android, Reference/Descriptor (+ Mixin for mods) for JVM; collapsed.
 - Strings panel: every string constant from bytecode (no decompile, ~0.2 s on 7k classes), grouped by shape,
   library strings hidden, Kotlin null-check names dropped, click opens the literal.
