@@ -6,6 +6,7 @@ done and add a `log.md` entry.
 
 ## In progress
 
+- [claude-t7b, 2026-10-11] tab bar redesign: options in `design/tabs-options.html`, then `Workbench.svelte` tabs
 
 ## Next (owner's plan for the next session)
 

@@ -84,16 +84,16 @@
   const pkg = $derived(tab.cls ? dotted(tab.cls.slice(0, Math.max(0, tab.cls.lastIndexOf("/")))) : "");
   const isDex = $derived(ws.opened.kind === "apk" || ws.opened.kind === "aab" || ws.opened.kind === "dex");
   /** The views a class tab can switch between, in the order shown. */
-  const views = $derived<{ view: View; label: string; tag: string }[]>(
+  const views = $derived<{ view: View; label: string }[]>(
     isDex
       ? [
-          { view: "java", label: "Java", tag: "" },
-          { view: "smali", label: "Smali", tag: "smali" },
+          { view: "java", label: "Java" },
+          { view: "smali", label: "Smali" },
         ]
       : [
-          { view: "java", label: "jadx", tag: "" },
-          ...(ws.opened.engines?.includes("vineflower") ? [{ view: "vineflower" as const, label: "Vineflower", tag: "vineflower" }] : []),
-          { view: "smali", label: "Bytecode", tag: "bytecode" },
+          { view: "java", label: "jadx" },
+          ...(ws.opened.engines?.includes("vineflower") ? [{ view: "vineflower" as const, label: "Vineflower" }] : []),
+          { view: "smali", label: "Bytecode" },
         ],
   );
 
@@ -754,19 +754,21 @@
           <div
             class="tab"
             class:on={t.key === ws.activeKey}
+            class:pin={t.kind === "overview"}
             role="tab"
             tabindex="-1"
             aria-selected={t.key === ws.activeKey}
-            title={t.cls ? dotted(t.cls) : (t.path ?? "")}
+            title={t.kind === "overview" ? "Overview" : t.cls ? dotted(t.cls) : (t.path ?? "")}
             onclick={() => ws.activate(t.key)}
             onkeydown={() => {}}
             onauxclick={(e) => e.button === 1 && ws.closeTab(t.key)}
           >
-            {#if t.kind === "overview"}<Icon name="info" size={15} />
-            {:else if t.kind === "class"}<span class="k {kind ? KIND_CLASS[kind] : 'k-c'}">{kind ? KIND_LETTER[kind] : "C"}</span>
+            <!-- Plain classes need no badge; only the kinds that differ get one. -->
+            {#if t.kind === "overview"}<Icon name="info" size={16} />
+            {:else if t.kind === "class"}{#if kind && kind !== "class"}<span class="k {KIND_CLASS[kind]}">{KIND_LETTER[kind]}</span>{/if}
             {:else}<Icon name="fileCode" size={15} />{/if}
-            <span class="tl">{tabLabel(t)}</span>
-            {#if t.kind === "class" && t.view !== "java"}<span class="vt">{views.find((v) => v.view === t.view)?.tag}</span>{/if}
+            {#if t.kind !== "overview"}<span class="tl">{tabLabel(t)}</span>{/if}
+            {#if t.kind === "class" && t.view !== "java"}<span class="vt">{views.find((v) => v.view === t.view)?.label}</span>{/if}
             {#if t.kind !== "overview"}
               <button class="tx" title="Close (Ctrl W)" onclick={(e) => (e.stopPropagation(), ws.closeTab(t.key))}><Icon name="x" size={13} /></button>
             {/if}
@@ -934,11 +936,13 @@
   .main {
     background: var(--editor);
   }
+  /* The active tab is the top of the editor page: same surface, no seam, no outline. */
   .tabs {
+    --tab-hover: color-mix(in srgb, var(--hover) 55%, var(--tabs));
     height: 44px;
     flex: none;
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 8px;
     padding: 0 6px;
     background: var(--tabs);
@@ -946,42 +950,50 @@
   .tablist {
     flex: 1;
     min-width: 0;
+    align-self: stretch;
     display: flex;
-    align-items: center;
-    gap: 2px;
+    align-items: flex-end;
     overflow-x: auto;
     scrollbar-width: none;
   }
   .tab {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 8px;
     flex: none;
     max-width: 230px;
-    height: 32px;
-    padding: 0 6px 0 11px;
-    border-radius: 8px;
-    color: var(--text-3);
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 9px 9px 0 0;
+    color: var(--text-2);
     cursor: pointer;
     white-space: nowrap;
   }
   .tab:hover {
-    color: var(--text-2);
-    background: var(--hover);
+    color: var(--text-hi);
+    background: var(--tab-hover);
   }
   .tab.on {
+    padding-right: 6px;
     background: var(--editor);
     color: var(--text-hi);
-    box-shadow: 0 0 0 1px var(--edge);
+  }
+  .tab.pin {
+    width: 40px;
+    padding: 0;
+    justify-content: center;
   }
   .tl {
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .vt {
-    font: 11.5px var(--font-code);
+    font-size: 12px;
     color: var(--text-3);
   }
+  /* Only the active tab keeps room for its close button. On the others it shows over
+     the end of the label on hover, so the gaps between tabs stay even. */
   .tx {
     display: grid;
     place-items: center;
@@ -991,18 +1003,23 @@
     color: var(--text-3);
     visibility: hidden;
   }
+  .tab:not(.on) .tx {
+    position: absolute;
+    right: 5px;
+    background: var(--tab-hover);
+    box-shadow: -6px 0 6px var(--tab-hover);
+  }
   .tab:hover .tx,
   .tab.on .tx {
     visibility: visible;
   }
-  .tx:hover {
+  .tx:hover,
+  .tab:not(.on) .tx:hover {
     background: var(--hover);
     color: var(--text-hi);
   }
-  .tab:not(:has(.tx)) {
-    padding-right: 12px;
-  }
   .views {
+    align-self: center;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1023,9 +1040,8 @@
     color: var(--text);
   }
   .seg button.on {
-    background: var(--panel);
+    background: var(--raised);
     color: var(--text-hi);
-    box-shadow: 0 0 0 1px var(--edge);
   }
   .pick {
     display: flex;
