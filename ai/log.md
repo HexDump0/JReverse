@@ -9,6 +9,14 @@ What was done. What's left. Anything the next agent must know.
 
 ---
 
+## 2026-10-11 — claude-r4n — progress review, notes refresh
+- Reviewed progress for the owner. All green: engine 27, Rust 16, frontend 34, `pnpm check` clean.
+- Owner asked to merge the v5 redesign into master: already done (fast-forward, `a02d645`, pushed;
+  `ui-redesign` deleted). Nothing to merge.
+- Notes: status.md gains the 2026-10-07 features (JVM overview, Strings, mappings), the OOM and split
+  APKs; project.md lists `Jvm`, `Strings`, `Mappings`, `hooks.ts` (was `frida.ts`), mapping-io.
+- Advised next: real Tauri window check of v5, engine `-Xmx`, split APKs, then release basics.
+
 ## 2026-10-07 — claude-k2m — JVM-aware overview, copy formats, strings panel
 - Owner's direction (decisions.md): a tool for understanding compiled Java, for everyone, reading only.
 - Overview reads mod/plugin descriptors (Fabric, Quilt, NeoForge/Forge, Bukkit/Paper, Bungee, Velocity),

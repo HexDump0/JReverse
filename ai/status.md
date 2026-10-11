@@ -1,6 +1,6 @@
 # Status
 
-_Last verified: 2026-10-05_
+_Last verified: 2026-10-11_
 
 ## Works
 
@@ -21,12 +21,19 @@ _Last verified: 2026-10-05_
     obfuscation), exported components and deep links, permissions by level, app code vs libraries,
     signing (v1/v2/v3, read not verified), native libs.
   - Files: resources and assets; binary XML and resources.arsc decoded; images; hex for binaries.
+  - JVM jars (2026-10-07): the Overview reads mod/plugin descriptors (Fabric, Quilt, NeoForge/Forge,
+    Bukkit/Paper, Bungee, Velocity), mixins and targets, services, bundled jars and Maven artifacts,
+    web.xml, and @Mod/Spring Boot/servlet entry classes. Inspector "Copy as": Frida/Xposed/Smali for
+    Android, Reference/Descriptor (+ Mixin for mods) for JVM.
+  - Strings panel (2026-10-07): every string constant from bytecode, grouped by shape, libraries hidden.
+  - Mappings (2026-10-07, File menu): import whatever mapping-io reads (R8 mapping.txt, Tiny, Enigma,
+    SRG), export ProGuard/Tiny v2/Enigma/TSRG v2. Classes get simple names only (no package moves).
 - Inputs: APK, AAB (code only, see below), AAR, JAR/WAR, DEX, single `.class`. Detection reads
   contents, not the extension.
 - Engine crash recovery: pending requests fail, the next request restarts the JVM, reopens the
   file and re-applies renames.
-- Tests green as of 2026-10-03: engine 25 (incl. smoke on the jlink runtime), Rust 16,
-  frontend 25, `pnpm check` 0 errors, clippy clean. CI (`.github/workflows/ci.yml`, ubuntu only)
+- Tests green as of 2026-10-11: engine 27 (incl. smoke on the jlink runtime), Rust 16,
+  frontend 34, `pnpm check` 0 errors. CI (`.github/workflows/ci.yml`, ubuntu only)
   ran green on `master` for the first time on 2026-10-03.
 - Checked against a real APK (F-Droid 1.21, 10,166 classes): opens in ~6 s, overview, files,
   usages; a cold code search decompiles everything in ~20 s, later ones are fast.
@@ -43,11 +50,12 @@ _Last verified: 2026-10-05_
 
 ## Design
 
-- 2026-10-06: the whole UI rebuilt to the approved `design/workbench-v5.html` (branch `ui-redesign`):
-  panel islands on a dark frame, panel rail, breadcrumb in the title bar, Inspector replacing the
-  Outline, comments as notes in the code, scrollbar marks, class map on the Overview, a quiet home
-  screen (no prism stage), three themes. Checked by screenshot (real engine, headless Chromium) on the
-  example JAR and a 3,000-class APK; not yet in the real Tauri window.
+- 2026-10-06: the whole UI rebuilt to the approved `design/workbench-v5.html`, merged into `master`
+  as `a02d645` (2026-10-07): panel islands on a dark frame, panel rail, breadcrumb in the title bar,
+  Inspector replacing the Outline, comments as notes in the code, scrollbar marks, class map on the
+  Overview, a quiet home screen (no prism stage), three themes. The owner approved v5 ("I like it
+  very much"). Checked by screenshot (real engine, headless Chromium) on the example JAR and a
+  3,000-class APK; not yet in the real Tauri window.
 
 ## Not release-ready (2026-10-05)
 
@@ -55,10 +63,12 @@ The owner calls it "usable-ish, not ready for release". Gaps found on 2026-10-05
 - No `LICENSE` and no third-party `NOTICE` (jadx, Vineflower and the bundled JRE all ship with it).
 - Linux only: never run on Windows or macOS, and CI builds only on ubuntu. No `tauri build`
   artifacts, signing or updater.
-- Engine JVM has no `-Xmx`, so the JVM picks its default heap size. Big APKs (40k+ classes) are untested.
+- Engine JVM has no `-Xmx`, so the JVM picks its default heap size. A 314 MB APK runs out of heap
+  on open (2026-10-07).
+- Split APKs (XAPK/APKS/APKM) can't be opened.
 - No settings (font size, theme, decompiler options). App icons in `src-tauri/icons/` are the brand ones.
 
 ## Repo state
 
-`master` = `origin/master` at `d024152`. The 2026-10-03 branch `claude/sharp-mendel-qbctaf` was
-fast-forwarded into it.
+`master` = `origin/master` at `a98555e` (2026-10-11). No other branches; `ui-redesign` was
+committed into `master` as `a02d645`.

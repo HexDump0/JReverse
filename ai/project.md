@@ -44,8 +44,8 @@ src/                       src-tauri/src/                                engine/
 | Path | What |
 |---|---|
 | `engine/.../engine/rpc/` | Protocol: `Server` (thread pool), `Methods`, `ErrorCode` |
-| `engine/.../engine/session/` | `InputDetector`, `Session(s)` (decompilers per file), `Overview` (manifest, zip facts), `Signing` (v1/v2/v3 certs), `Export` |
-| `engine/.../engine/backend/` | `JadxBackend` (decompile with links, smali, usages, renames), `VineflowerBackend` (class files only), `Nodes` (wire ids), `Search`, `ArchiveFiles` (resources) |
+| `engine/.../engine/session/` | `InputDetector`, `Session(s)` (decompilers per file), `Overview` (manifest, zip facts), `Jvm` (mod/plugin descriptors, services, bundled jars, servlets, entry classes), `Signing` (v1/v2/v3 certs), `Export` |
+| `engine/.../engine/backend/` | `JadxBackend` (decompile with links, smali, usages, renames), `VineflowerBackend` (class files only), `Nodes` (wire ids), `Search`, `Strings` (string constants from bytecode, no decompile), `Mappings` (import/export via mapping-io), `ArchiveFiles` (resources) |
 | `engine/src/fixtures/`, `engine/src/test/fixtures/` | Tiny Java classes and smali compiled into test inputs |
 | `engine/src/example/` | The bundled example app, built into `engine-dist/vault-example.jar` by `pnpm engine` |
 | `src-tauri/src/engine/` | `mod.rs` (Engine, sessions, code-data replay), `process.rs` (one JVM, routing), `locate.rs`, `tests.rs` |
@@ -54,8 +54,8 @@ src/                       src-tauri/src/                                engine/
 | `src/lib/workbench/CodeView.svelte` | Virtualized code view: caret, links, occurrences, find in class, your comments as notes, method band, scrollbar marks |
 | `src/lib/workbench/Workbench.svelte` | The layout: panel rail, side panel, tabs, editor, inspector, usages, keys, menus |
 | `src/lib/workbench/Inspector.svelte` | Right panel: what's under the caret, live usages, calls, your notes, Frida hook |
-| `src/lib/workbench/*Panel.svelte`, `OverviewPage.svelte`, `ClassTree.svelte` | Search, usages, notes, files, overview (with class map), class tree (libraries grouped, members of the open class) |
-| `src/lib/workbench/android.ts`, `frida.ts`, `tree.ts` | Library prefixes and permission levels, Frida snippets, tree building |
+| `src/lib/workbench/*Panel.svelte`, `OverviewPage.svelte`, `ClassTree.svelte` | Search, usages, notes, files, strings, overview (with class map), class tree (libraries grouped, members of the open class) |
+| `src/lib/workbench/android.ts`, `hooks.ts`, `strings.ts`, `tree.ts`, `ids.ts` | Library prefixes and permission levels, Frida/Xposed snippets, string shapes, tree building, node id helpers |
 | `design/workbench-v5.html` | The approved UI (2026-10-06), a clickable mockup; v2 to v4 are the rounds before it. **Local only**, see gotchas. |
 | `design/DESIGN.md`, `design/mockup.html` | The first UI spec and mockup; v5 supersedes its looks, its interaction rules still hold. **Local only.** |
 | `brand/BRAND.md` | Logo, colours, type. **Local only.** |
@@ -64,4 +64,4 @@ src/                       src-tauri/src/                                engine/
 
 Tauri 2, Svelte 5 (runes), SvelteKit with adapter-static, Vite 8,
 TypeScript 6, Vitest 5, pnpm 11. Rust edition 2021 with tokio. JDK 21,
-Gradle 9, jadx 1.5.6, Vineflower 1.12.0, Gson, JUnit 6.
+Gradle 9, jadx 1.5.6, Vineflower 1.12.0, mapping-io 0.9.1, Gson, JUnit 6.

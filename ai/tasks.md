@@ -9,8 +9,6 @@ done and add a `log.md` entry.
 
 ## Next (owner's plan for the next session)
 
-- The v5 redesign is built on branch `ui-redesign` (uncommitted, 2026-10-06). The owner reviews it in
-  the real app, then decides on committing. History of the rounds: v2 to v5 in `design/` and log.md.
 - Check the redesign in the real Tauri window: dragging by the title bar (the drag regions moved
   into a three-column grid), the theme script in `app.html`, drop anywhere.
 - Real app identity on home rows and the Overview: launcher icon, app label, package + version
