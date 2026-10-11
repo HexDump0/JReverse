@@ -9,6 +9,15 @@ What was done. What's left. Anything the next agent must know.
 
 ---
 
+## 2026-10-11 — claude-r4n — warm-up, palette ranking, app identity on home
+- Engine `warm` (opens one of its own classes) called from `+page.svelte` on mount: first open of a
+  3.7k-class APK 2.4 s to ~2.0 s. Starting the JVM alone saves only 0.1 s; loading jadx is the cost.
+- Palette `rank()`: same score, the file's own classes before `ws.libraries` ones.
+- Engine `identity` (`Identity.java`, `ResTable.java`): label/icon resolved through resources.arsc,
+  so shrunk resource paths work; mods get `icon` from fabric/quilt/mods.toml. Rust `app_identity`
+  stores name/appId/version in recents and the icon in `icons/<fnv>.json`. Checked on ~14 real files.
+- Not checked in the real window: how the icons look on home rows. Vector icons fall back to the kind icon.
+
 ## 2026-10-11 — claude-r4n — progress review, notes refresh
 - Reviewed progress for the owner. All green: engine 27, Rust 16, frontend 34, `pnpm check` clean.
 - Owner asked to merge the v5 redesign into master: already done (fast-forward, `a02d645`, pushed;

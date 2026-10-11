@@ -67,6 +67,8 @@ public final class Server {
 				Map.entry("export", methods::export),
 				Map.entry("cancel", methods::cancel),
 				Map.entry("overview", methods::overview),
+				Map.entry("identity", methods::identity),
+				Map.entry("warm", methods::warm),
 				Map.entry("setCodeData", methods::setCodeData),
 				Map.entry("files", methods::files),
 				Map.entry("file", methods::file),

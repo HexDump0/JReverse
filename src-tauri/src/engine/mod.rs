@@ -182,6 +182,12 @@ impl Engine {
         Ok(result)
     }
 
+    /// Starts the engine if it isn't running and has it load jadx, so the
+    /// first open doesn't wait for either.
+    pub async fn warm(&self) -> Result<(), EngineError> {
+        self.process().await?.request("warm", json!({})).await.map(|_| ())
+    }
+
     /// Stops a running search or export. A job that already finished, or an
     /// engine that isn't running, is not an error.
     pub async fn cancel(&self, ticket: &str) -> Result<(), EngineError> {

@@ -268,6 +268,7 @@ public final class Overview {
 		JsonArray components = new JsonArray();
 		if (app != null) {
 			put(o, "label", a(app, "label"));
+			put(o, "icon", a(app, "icon"));
 			put(o, "application", className(pkg, a(app, "name")));
 			put(o, "debuggable", a(app, "debuggable"));
 			put(o, "allowBackup", a(app, "allowBackup"));

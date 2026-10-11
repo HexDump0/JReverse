@@ -154,7 +154,7 @@ class OverviewTest {
 		Path jar = tmp.resolve("mod.jar");
 		Fixtures.zip(jar,
 				"fabric.mod.json", """
-						{"id": "demo", "name": "Demo", "version": "1.2", "authors": ["ann", {"name": "bo"}],
+						{"id": "demo", "name": "Demo", "version": "1.2", "authors": ["ann", {"name": "bo"}], "icon": "assets/demo/icon.png",
 						 "entrypoints": {"main": ["demo.Main"], "client": [{"value": "demo.Client::init"}]},
 						 "depends": {"minecraft": "1.21.x"}}
 						""".getBytes(),
@@ -193,6 +193,7 @@ class OverviewTest {
 		JsonObject fabric = plugins.get(0).getAsJsonObject();
 		assertEquals("fabric", fabric.get("loader").getAsString());
 		assertEquals("[\"ann\",\"bo\"]", fabric.get("authors").toString());
+		assertEquals("assets/demo/icon.png", fabric.get("icon").getAsString());
 		JsonArray entries = fabric.getAsJsonArray("entries");
 		assertEquals("demo.Main", entries.get(0).getAsJsonObject().get("cls").getAsString());
 		assertEquals("demo.Client", entries.get(1).getAsJsonObject().get("cls").getAsString());

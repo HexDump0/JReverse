@@ -244,6 +244,16 @@ export function openFile(path: string, deobfuscate = false): Promise<Opened> {
   return invoke("open_file", { path, deobfuscate });
 }
 
+/** Starts the engine and has it load jadx, so the first open is faster. */
+export function warmEngine(): Promise<void> {
+  return invoke("warm_engine");
+}
+
+/** Reads the open file's name, version and icon into its recent entry. */
+export function appIdentity(session: string, path: string): Promise<void> {
+  return invoke("app_identity", { session, path });
+}
+
 export function listClasses(session: string): Promise<ClassEntry[]> {
   return invoke("list_classes", { session });
 }
@@ -416,11 +426,28 @@ export interface Recent {
   size: number;
   /** Unix time in milliseconds. */
   openedAt: number;
+  /** What the file calls itself: an app's label, a mod's or library's name. */
+  name?: string;
+  /** Package, mod id or Maven coordinates. */
+  appId?: string;
+  version?: string;
+}
+
+export interface AppIcon {
+  mime: string;
+  /** Base64. */
+  data: string;
+  /** An Android 8+ adaptive icon: `data` is the foreground layer, drawn over `background` or `backdrop`. */
+  adaptive?: boolean;
+  /** CSS colour. */
+  background?: string;
+  backdrop?: AppIcon;
 }
 
 export interface RecentView extends Recent {
   /** The file isn't at `path` any more. */
   missing: boolean;
+  icon?: AppIcon;
 }
 
 export function peekFile(path: string): Promise<Peek> {

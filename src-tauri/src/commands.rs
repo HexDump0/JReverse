@@ -6,7 +6,7 @@ use tauri::{AppHandle, Manager, State};
 use crate::engine::{ClassEntry, Decompiled, Engine, EngineError, Opened};
 use crate::peek::Peek;
 use crate::projects::Projects;
-use crate::recents::{Recent, RecentView, Recents};
+use crate::recents::{Identity, Recent, RecentView, Recents};
 
 #[tauri::command]
 pub async fn open_file(
@@ -18,6 +18,27 @@ pub async fn open_file(
     let opened = engine.open(&path, deobfuscate.unwrap_or(false)).await?;
     recents.record(&path, &opened.kind, opened.class_count);
     Ok(opened)
+}
+
+/// Called while the home screen is up, so opening a file starts sooner.
+#[tauri::command]
+pub async fn warm_engine(engine: State<'_, Engine>) -> Result<(), EngineError> {
+    engine.warm().await
+}
+
+/// Reads the name, version and icon of the file open in `session` and keeps
+/// them with its recent entry, for the home screen.
+#[tauri::command]
+pub async fn app_identity(
+    engine: State<'_, Engine>,
+    recents: State<'_, Recents>,
+    session: String,
+    path: PathBuf,
+) -> Result<(), EngineError> {
+    let value = engine.call(&session, "identity", Map::new()).await?;
+    let identity: Identity = serde_json::from_value(value).map_err(|e| EngineError::BadResponse(e.to_string()))?;
+    recents.set_identity(&path, identity);
+    Ok(())
 }
 
 #[tauri::command]

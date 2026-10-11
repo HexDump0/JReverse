@@ -7,7 +7,23 @@
     action?: boolean;
     /** A member of the open class; shown alone when the query starts with `@`. */
     member?: boolean;
+    /** Library code: listed after the file's own items that match as well. */
+    library?: boolean;
     run: () => void;
+  }
+
+  /**
+   * Sections stay together; within one, better matches first, then the file's
+   * own items before library ones, then the original order.
+   */
+  export function rank(ranked: [score: number, index: number, item: PaletteItem][]): PaletteItem[] {
+    const order = new Map<string, number>();
+    for (const [, , it] of ranked) if (!order.has(it.section)) order.set(it.section, order.size);
+    ranked.sort(
+      (a, b) =>
+        order.get(a[2].section)! - order.get(b[2].section)! || a[0] - b[0] || Number(!!a[2].library) - Number(!!b[2].library) || a[1] - b[1],
+    );
+    return ranked.map(([, , it]) => it);
   }
 
   /**
@@ -60,11 +76,7 @@
       if (s < 0 && it.sub?.toLowerCase().includes(q)) s = 4;
       if (s >= 0) ranked.push([s, i, it]);
     });
-    // Sections stay together; within one, better matches first.
-    const order = new Map<string, number>();
-    for (const [, , it] of ranked) if (!order.has(it.section)) order.set(it.section, order.size);
-    ranked.sort((a, b) => order.get(a[2].section)! - order.get(b[2].section)! || a[0] - b[0] || a[1] - b[1]);
-    return ranked.slice(0, MAX_SHOWN).map(([, , it]) => it);
+    return rank(ranked).slice(0, MAX_SHOWN);
   });
 
   $effect(() => {

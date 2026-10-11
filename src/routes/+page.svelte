@@ -21,6 +21,8 @@
     type Peek,
     type Recent,
     type RecentView,
+    warmEngine,
+    appIdentity,
   } from "$lib/engine";
   import { baseName, dirName, tildify } from "$lib/format";
   import { fmtN } from "$lib/format";
@@ -126,6 +128,8 @@
       ws = new Workspace(path, name, opened, classes);
       readout = null;
       say(`Opened ${name} in ${opened.ms} ms`);
+      // Not awaited: the name and icon are for the home screen, later.
+      appIdentity(opened.session, path).then(refreshRecents, () => {});
     } catch (e) {
       if (token === openToken) say(`Couldn't open ${name}: ${errorMessage(e)}`, true);
     } finally {
@@ -267,6 +271,8 @@
 
   onMount(() => {
     refreshRecents();
+    // The failure, if any, reaches the status bar through engine://status.
+    warmEngine().catch(() => {});
     homeDir().then((h) => (home = h), () => {});
     const unlisten = [
       onEngineStatus((s) => {

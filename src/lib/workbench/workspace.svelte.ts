@@ -95,6 +95,8 @@ export class Workspace {
   readonly classes: ClassEntry[];
   readonly byId: Map<string, ClassEntry>;
   readonly tree: Pkg;
+  /** Classes from known libraries (androidx, kotlin, okhttp, ...). */
+  readonly libraries: Set<string>;
 
   project = $state<Project>(empty());
   tabs = $state<Tab[]>([{ key: OVERVIEW, kind: "overview", view: "java", caret: { line: 0, col: 0 }, reveal: null }]);
@@ -124,7 +126,8 @@ export class Workspace {
     this.opened = opened;
     this.classes = classes;
     this.byId = new Map(classes.map((c) => [c.id, c]));
-    this.tree = buildClassTree(classes, (id) => libraryOf(id) !== null, looksObfuscated);
+    this.libraries = new Set(classes.filter((c) => libraryOf(c.id) !== null).map((c) => c.id));
+    this.tree = buildClassTree(classes, (id) => this.libraries.has(id), looksObfuscated);
   }
 
   get session() {

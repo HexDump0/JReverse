@@ -95,6 +95,13 @@ class ProtocolTest {
 	}
 
 	@Test
+	void warmAndIdentity() throws Exception {
+		assertTrue(result(engine.call("warm")).has("ms"));
+		String session = result(engine.call("open", "path", Fixtures.jar().toString())).get("session").getAsString();
+		assertEquals(new JsonObject(), result(engine.call("identity", "session", session)));
+	}
+
+	@Test
 	void concurrentRequestsAreAllAnswered() throws Exception {
 		String session = result(engine.call("open", "path", Fixtures.jar().toString())).get("session").getAsString();
 		List<Long> ids = Fixtures.JAR_CLASSES.stream().map(cls -> {

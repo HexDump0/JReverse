@@ -35,6 +35,7 @@ import jadx.api.metadata.annotations.NodeDeclareRef;
 import jadx.api.plugins.loader.JadxBasePluginLoader;
 import jadx.core.dex.info.AccessInfo;
 import jadx.core.dex.instructions.args.ArgType;
+import jadx.core.dex.nodes.RootNode;
 
 import io.github.hexdump0.jreverse.engine.rpc.ErrorCode;
 import io.github.hexdump0.jreverse.engine.rpc.RpcException;
@@ -267,6 +268,11 @@ public final class JadxBackend implements Backend {
 	/** Resources, assets and other files that aren't code. */
 	public ArchiveFiles files() {
 		return files;
+	}
+
+	/** jadx's own model, for parsers that need it (the resource table). */
+	public RootNode root() {
+		return jadx.getRoot();
 	}
 
 	/** The decoded AndroidManifest.xml, or null for anything but an APK or AAR. */

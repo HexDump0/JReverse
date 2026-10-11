@@ -5,6 +5,9 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::projects::fnv1a;
 
 const MAX: usize = 50;
 
@@ -17,6 +20,24 @@ pub struct Recent {
     pub size: u64,
     /// Unix time in milliseconds.
     pub opened_at: u64,
+    /// What the file calls itself, from the engine's `identity`; kept across reopens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Package, mod id or Maven coordinates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+}
+
+/// A file's name, id, version and icon, as the engine's `identity` gives them.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Identity {
+    pub name: Option<String>,
+    pub id: Option<String>,
+    pub version: Option<String>,
+    pub icon: Option<Value>,
 }
 
 /// What the frontend gets: a recent file plus whether it is still there.
@@ -26,6 +47,9 @@ pub struct RecentView {
     #[serde(flatten)]
     pub recent: Recent,
     pub missing: bool,
+    /// `{mime, data, adaptive?, background?, backdrop?}`, as the engine sent it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<Value>,
 }
 
 pub struct Recents {
@@ -35,7 +59,7 @@ pub struct Recents {
 
 impl Recents {
     /// Loads `file`; a missing or unreadable one starts an empty list.
-    /// `None` keeps the list in memory only.
+    /// `None` keeps the list in memory only. Icons live in `icons/` next to it.
     pub fn load(file: Option<PathBuf>) -> Self {
         let list = file
             .as_deref()
@@ -48,7 +72,9 @@ impl Recents {
                 }
             })
             .unwrap_or_default();
-        Self { file, list: Mutex::new(list) }
+        let recents = Self { file, list: Mutex::new(list) };
+        recents.prune_icons();
+        recents
     }
 
     pub fn list(&self) -> Vec<RecentView> {
@@ -56,18 +82,74 @@ impl Recents {
             .lock()
             .unwrap()
             .iter()
-            .map(|r| RecentView { missing: !r.path.is_file(), recent: r.clone() })
+            .map(|r| RecentView {
+                missing: !r.path.is_file(),
+                icon: self.icon_file(&r.path).and_then(|f| std::fs::read(f).ok()).and_then(|b| serde_json::from_slice(&b).ok()),
+                recent: r.clone(),
+            })
             .collect()
     }
 
     /// Moves `path` to the top, replacing what was known about it.
     pub fn record(&self, path: &Path, kind: &str, class_count: u64) {
         let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-        let entry = Recent { path: path.to_path_buf(), kind: kind.into(), class_count, size, opened_at: now_ms() };
+        let mut entry = Recent {
+            path: path.to_path_buf(),
+            kind: kind.into(),
+            class_count,
+            size,
+            opened_at: now_ms(),
+            name: None,
+            app_id: None,
+            version: None,
+        };
         self.update(|list| {
+            if let Some(old) = list.iter().find(|r| r.path == entry.path) {
+                entry.name = old.name.clone();
+                entry.app_id = old.app_id.clone();
+                entry.version = old.version.clone();
+            }
             list.retain(|r| r.path != entry.path);
             list.insert(0, entry);
         });
+    }
+
+    /// Stores what `path` calls itself; a file not in the list is ignored.
+    pub fn set_identity(&self, path: &Path, identity: Identity) {
+        if let Some(file) = self.icon_file(path) {
+            let saved = match &identity.icon {
+                Some(icon) => std::fs::create_dir_all(file.parent().expect("icons live in a dir"))
+                    .and_then(|()| std::fs::write(&file, serde_json::to_vec(icon).unwrap_or_default())),
+                None => std::fs::remove_file(&file).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) }),
+            };
+            if let Err(e) = saved {
+                log::error!("could not save the icon of {}: {e}", path.display());
+            }
+        }
+        self.update(|list| {
+            if let Some(r) = list.iter_mut().find(|r| r.path == path) {
+                r.name = identity.name;
+                r.app_id = identity.id;
+                r.version = identity.version;
+            }
+        });
+    }
+
+    fn icon_file(&self, path: &Path) -> Option<PathBuf> {
+        let dir = self.file.as_ref()?.parent()?.join("icons");
+        Some(dir.join(format!("{:016x}.json", fnv1a(path.to_string_lossy().as_bytes()))))
+    }
+
+    /// Deletes icons of files no longer listed. Only at startup, so a removal can still be undone.
+    fn prune_icons(&self) {
+        let Some(dir) = self.file.as_ref().and_then(|f| f.parent()).map(|d| d.join("icons")) else { return };
+        let Ok(entries) = std::fs::read_dir(&dir) else { return };
+        let keep: Vec<PathBuf> = self.list.lock().unwrap().iter().filter_map(|r| self.icon_file(&r.path)).collect();
+        for e in entries.flatten() {
+            if !keep.contains(&e.path()) {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
     }
 
     pub fn forget(&self, path: &Path) {
@@ -130,6 +212,27 @@ mod tests {
 
         recents.forget(&dir.join("gone.apk"));
         assert_eq!(recents.list().len(), 1);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn keeps_identity_and_icon_across_reopens() {
+        let dir = std::env::temp_dir().join(format!("jreverse-recents-id-{}", std::process::id()));
+        let file = dir.join("recent.json");
+        let a = dir.join("a.apk");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&a, b"PK").unwrap();
+
+        let recents = Recents::load(Some(file.clone()));
+        recents.record(&a, "apk", 3);
+        let icon = serde_json::json!({ "mime": "image/png", "data": "iVBO" });
+        let identity = Identity { name: Some("Demo".into()), id: Some("com.demo".into()), version: Some("1.2".into()), icon: Some(icon.clone()) };
+        recents.set_identity(&a, identity);
+        recents.record(&a, "apk", 4);
+
+        let list = Recents::load(Some(file)).list();
+        assert_eq!((list[0].recent.name.as_deref(), list[0].recent.app_id.as_deref()), (Some("Demo"), Some("com.demo")));
+        assert_eq!(list[0].icon.as_ref(), Some(&icon));
         std::fs::remove_dir_all(dir).ok();
     }
 }

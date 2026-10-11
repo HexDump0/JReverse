@@ -233,6 +233,7 @@ final class Jvm {
 		p.add("entries", entrypoints(j.get("entrypoints")));
 		p.add("depends", dependencies(j.get("depends")));
 		put(p, "environment", str(j, "environment"));
+		put(p, "icon", icon(j.get("icon")));
 		out.add(p);
 	}
 
@@ -250,9 +251,35 @@ final class Jvm {
 			put(p, "name", str(meta, "name"));
 			put(p, "description", str(meta, "description"));
 			p.add("authors", people(meta.get("contributors") instanceof JsonObject c ? toArray(c.keySet()) : null));
+			put(p, "icon", icon(meta.get("icon")));
 		}
 		p.add("entries", entrypoints(ql.get("entrypoints")));
 		out.add(p);
+	}
+
+	/** Fabric and Quilt give an icon path, or paths by pixel size; the biggest wins. */
+	private static String icon(JsonElement e) {
+		if (e instanceof JsonObject sizes) {
+			String best = null;
+			int bestSize = -1;
+			for (var s : sizes.entrySet()) {
+				int size = parseSize(s.getKey());
+				if (size > bestSize && s.getValue().isJsonPrimitive()) {
+					best = s.getValue().getAsString();
+					bestSize = size;
+				}
+			}
+			return best;
+		}
+		return e != null && e.isJsonPrimitive() ? e.getAsString() : null;
+	}
+
+	private static int parseSize(String s) {
+		try {
+			return Integer.parseInt(s.trim());
+		} catch (NumberFormatException e) {
+			return 0;
+		}
 	}
 
 	private static JsonArray entrypoints(JsonElement e) {
@@ -369,6 +396,8 @@ final class Jvm {
 			p.add("authors", authors);
 			p.add("entries", new JsonArray());
 			put(p, "license", top.get("license"));
+			String logo = mod.get("logoFile") != null ? mod.get("logoFile") : top.get("logoFile");
+			put(p, "icon", logo != null ? logo.replaceFirst("^/", "") : null);
 			out.add(p);
 		}
 	}

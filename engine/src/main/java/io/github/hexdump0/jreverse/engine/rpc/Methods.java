@@ -1,5 +1,7 @@
 package io.github.hexdump0.jreverse.engine.rpc;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -16,6 +18,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import io.github.hexdump0.jreverse.engine.Version;
 import io.github.hexdump0.jreverse.engine.backend.ArchiveFiles;
 import io.github.hexdump0.jreverse.engine.backend.Backend;
 import io.github.hexdump0.jreverse.engine.backend.ClassEntry;
@@ -282,6 +285,47 @@ final class Methods {
 
 	JsonElement overview(JsonObject params) throws RpcException {
 		return sessions.get(string(params, "session")).overview();
+	}
+
+	JsonElement identity(JsonObject params) throws RpcException {
+		return sessions.get(string(params, "session")).identity();
+	}
+
+	/**
+	 * Opens and decompiles one of the engine's own classes, so the first real
+	 * open doesn't pay for loading jadx and its decompiler passes.
+	 */
+	JsonElement warm(JsonObject params) throws RpcException {
+		long start = System.nanoTime();
+		Path dir = null;
+		try (InputStream in = Version.class.getResourceAsStream("Version.class")) {
+			if (in == null) {
+				throw new RpcException(ErrorCode.INTERNAL, "engine classes aren't readable");
+			}
+			dir = Files.createTempDirectory("jreverse-warm");
+			Path cls = dir.resolve("Version.class");
+			Files.copy(in, cls);
+			Session session = sessions.open(cls, false);
+			try {
+				session.jadx().decompile(session.classes().get(0).id());
+			} finally {
+				sessions.close(session.id());
+			}
+		} catch (IOException e) {
+			throw new RpcException(ErrorCode.INTERNAL, "warm-up failed: " + e, e);
+		} finally {
+			if (dir != null) {
+				try {
+					Files.deleteIfExists(dir.resolve("Version.class"));
+					Files.deleteIfExists(dir);
+				} catch (IOException e) {
+					System.err.println("engine: could not delete " + dir + ": " + e);
+				}
+			}
+		}
+		JsonObject result = new JsonObject();
+		result.addProperty("ms", millisSince(start));
+		return result;
 	}
 
 	JsonElement setCodeData(JsonObject params) throws RpcException {

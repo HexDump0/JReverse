@@ -56,6 +56,8 @@ apply to jadx only. Both share jadx's class ids.
 | `export` | `session`, `dir`, `ticket`? | `dir`, `written`, `failed`, `ms` |
 | `cancel` | `ticket` | `cancelled`: whether a job with that ticket was running |
 | `overview` | `session` | see below |
+| `identity` | `session` | what the file calls itself, for lists of files: `name`?, `id`? (package, mod id, `group:artifact`), `version`?, `icon`? `{mime, data, adaptive?, background?, backdrop?}`. APKs: label and launcher icon from resources.arsc, the sharpest PNG/WebP, else an adaptive icon's bitmap foreground over its background colour (`#rrggbbaa`) or `backdrop` image; vector icons aren't drawn. JARs: the first mod/plugin descriptor, else `Implementation-Title`, else a lone Maven artifact. `{}` when nothing says |
+| `warm` | | `ms`: opens and decompiles one of the engine's own classes, so the first real open doesn't pay for loading jadx |
 | `files` | `session` | `files: [{path, type, size}]`: everything but code |
 | `file` | `session`, `path` | `{path, kind, size, text?, data?, mime?, children?, truncated}` |
 | `setCodeData` | `session`, `renames`? `{node: name}`, `comments`? `{node: text}` | `applied`. Replaces all earlier ones. |
@@ -92,14 +94,14 @@ for archives `files`, `dex`, `nativeLibs: [{abi, name, size}]`,
 `javaVersions: [{java, classes}]`, `jarManifest`, and `signing: {schemes,
 certs}` (v1 signature files and the v2/v3 signing block, read but not
 verified); for APK/AAR the decoded `manifest` and `android` (package,
-versions, SDKs, permissions, application flags and `components` with
+versions, SDKs, `label` and `icon` references, permissions, application flags and `components` with
 `exported`, `launcher`, intent actions and deep `links`).
 
 For JAR/AAR also, when present: `plugins` (mod and plugin descriptors:
 `fabric.mod.json`, `quilt.mod.json`, `[neoforge.]mods.toml`, `plugin.yml`,
 `paper-plugin.yml`, `bungee.yml`, `velocity-plugin.json`, each `{loader,
-file, id?, name?, version?, description?, authors, entries: [{kind, cls,
-member?}], depends?}`), `mixinConfigs: [{file, package, classes: [{cls,
+file, id?, name?, version?, description?, icon?, authors, entries: [{kind, cls,
+member?}], depends?}`; `icon` is a path in the archive), `mixinConfigs: [{file, package, classes: [{cls,
 side}]}]`, `services: [{service, providers}]` from `META-INF/services`,
 `artifacts: [{group, artifact, version}]` from `pom.properties`, bundled
 `jars: [{path, size}]`, `web` (`web.xml`: `servlets`, `filters` as `{name,

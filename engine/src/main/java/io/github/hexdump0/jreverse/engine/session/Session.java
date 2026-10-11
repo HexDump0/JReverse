@@ -28,6 +28,7 @@ public final class Session implements AutoCloseable {
 	private final Map<String, Backend> others = new HashMap<>();
 	private final boolean deobfuscated;
 	private JsonObject overview;
+	private JsonObject identity;
 	private List<Strings.Value> strings;
 
 	Session(String id, Path path, InputKind kind, JadxBackend primary, boolean deobfuscated) {
@@ -70,6 +71,14 @@ public final class Session implements AutoCloseable {
 			overview = Overview.build(this);
 		}
 		return overview;
+	}
+
+	/** Name, version and icon for lists of files; see {@link Identity}. */
+	public synchronized JsonObject identity() {
+		if (identity == null) {
+			identity = Identity.build(this);
+		}
+		return identity;
 	}
 
 	/** Every string constant, collected on first request; a cancelled run isn't kept. */

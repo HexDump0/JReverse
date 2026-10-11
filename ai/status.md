@@ -4,6 +4,11 @@ _Last verified: 2026-10-11_
 
 ## Works
 
+- Home rows show what the file calls itself (2026-10-11): app label, package and version, and the
+  launcher icon (PNG/WebP, or an adaptive icon with a bitmap foreground); mods and plugins by their
+  descriptor name and icon. Read after open by the engine's `identity`, kept in recents (`icons/` in
+  the app data dir). The engine warms up (`warm`) while home is up: ~0.4 s off a 2.4 s first open.
+  The palette lists the file's own classes before library classes that match as well.
 - Start screen and onboarding (2026-10-01). The Continue card now says which class you were last in
   and how many notes the file has, and Enter reopens its tabs (2026-10-03).
 - Workbench (2026-10-03), replacing the old test bench:
@@ -32,8 +37,8 @@ _Last verified: 2026-10-11_
   contents, not the extension.
 - Engine crash recovery: pending requests fail, the next request restarts the JVM, reopens the
   file and re-applies renames.
-- Tests green as of 2026-10-11: engine 27 (incl. smoke on the jlink runtime), Rust 16,
-  frontend 34, `pnpm check` 0 errors. CI (`.github/workflows/ci.yml`, ubuntu only)
+- Tests green as of 2026-10-11: engine 33 (incl. smoke on the jlink runtime), Rust 17,
+  frontend 35, `pnpm check` 0 errors. CI (`.github/workflows/ci.yml`, ubuntu only)
   ran green on `master` for the first time on 2026-10-03.
 - Checked against a real APK (F-Droid 1.21, 10,166 classes): opens in ~6 s, overview, files,
   usages; a cold code search decompiles everything in ~20 s, later ones are fast.

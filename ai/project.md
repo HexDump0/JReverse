@@ -44,8 +44,8 @@ src/                       src-tauri/src/                                engine/
 | Path | What |
 |---|---|
 | `engine/.../engine/rpc/` | Protocol: `Server` (thread pool), `Methods`, `ErrorCode` |
-| `engine/.../engine/session/` | `InputDetector`, `Session(s)` (decompilers per file), `Overview` (manifest, zip facts), `Jvm` (mod/plugin descriptors, services, bundled jars, servlets, entry classes), `Signing` (v1/v2/v3 certs), `Export` |
-| `engine/.../engine/backend/` | `JadxBackend` (decompile with links, smali, usages, renames), `VineflowerBackend` (class files only), `Nodes` (wire ids), `Search`, `Strings` (string constants from bytecode, no decompile), `Mappings` (import/export via mapping-io), `ArchiveFiles` (resources) |
+| `engine/.../engine/session/` | `InputDetector`, `Session(s)` (decompilers per file), `Overview` (manifest, zip facts), `Jvm` (mod/plugin descriptors, services, bundled jars, servlets, entry classes), `Identity` (name, version, icon for home rows), `Signing` (v1/v2/v3 certs), `Export` |
+| `engine/.../engine/backend/` | `JadxBackend` (decompile with links, smali, usages, renames), `VineflowerBackend` (class files only), `Nodes` (wire ids), `Search`, `Strings` (string constants from bytecode, no decompile), `Mappings` (import/export via mapping-io), `ResTable` (single values from resources.arsc), `ArchiveFiles` (resources) |
 | `engine/src/fixtures/`, `engine/src/test/fixtures/` | Tiny Java classes and smali compiled into test inputs |
 | `engine/src/example/` | The bundled example app, built into `engine-dist/vault-example.jar` by `pnpm engine` |
 | `src-tauri/src/engine/` | `mod.rs` (Engine, sessions, code-data replay), `process.rs` (one JVM, routing), `locate.rs`, `tests.rs` |

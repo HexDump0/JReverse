@@ -15,7 +15,7 @@
   // open tabs, ready to continue. A file can be dropped anywhere in the window.
   import { tick } from "svelte";
   import { getVersion } from "@tauri-apps/api/app";
-  import { loadProject, saveProject, type InputKind, type Project, type RecentView } from "$lib/engine";
+  import { loadProject, saveProject, type AppIcon, type InputKind, type Project, type RecentView } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
   import type { IconName } from "$lib/icons";
   import { baseName, dirName, fmtN, fmtSize, fmtWhen, kindLabel, tildify } from "$lib/format";
@@ -69,13 +69,16 @@
 
   const rows = $derived.by(() => {
     const q = query.trim().toLowerCase();
-    if (q) return entries.filter((r) => baseName(r.path).toLowerCase().includes(q));
+    if (q) return entries.filter((r) => [baseName(r.path), r.name, r.appId].some((s) => s?.toLowerCase().includes(q)));
     return all ? entries : entries.slice(0, SHOWN);
   });
 
   const isLoading = (r: RecentView) => opening?.path === r.path;
   const isExample = (r: RecentView) => r.path === example?.path && r.openedAt === 0;
   const where = (r: RecentView) => tildify(dirName(r.path), home);
+  /** `com.whatsapp 2.24`, or where the file is when it doesn't say. */
+  const sub = (r: RecentView) => (r.name ? [r.appId, r.version].filter(Boolean).join(" ") : "") || where(r);
+  const src = (i: AppIcon) => `data:${i.mime};base64,${i.data}`;
 
   /* ---------- where you were, for the selected file ---------- */
   const projects = new Map<string, Project | null>();
@@ -253,11 +256,20 @@
             onclick={() => (on ? open(r) : select(k))}
             ondblclick={() => open(r)}
           >
-            <span class="ic" style:color={TINT[r.kind]} style:background="color-mix(in srgb, {TINT[r.kind]} 16%, var(--panel))"><Icon name={ICON[r.kind]} size={21} /></span>
+            {#if r.icon?.adaptive}
+              <span class="ic app adaptive" style:background={r.icon.background ?? "var(--panel)"}>
+                {#if r.icon.backdrop}<img src={src(r.icon.backdrop)} alt="" />{/if}
+                <img src={src(r.icon)} alt="" />
+              </span>
+            {:else if r.icon}
+              <span class="ic app"><img src={src(r.icon)} alt="" /></span>
+            {:else}
+              <span class="ic" style:color={TINT[r.kind]} style:background="color-mix(in srgb, {TINT[r.kind]} 16%, var(--panel))"><Icon name={ICON[r.kind]} size={21} /></span>
+            {/if}
             <div class="tx">
               <div class="t1">
-                <b>{baseName(r.path)}</b>
-                <span class="sub">{isExample(r) ? "Example app, bundled with JReverse" : where(r)}</span>
+                <b>{r.name ?? baseName(r.path)}</b>
+                <span class="sub">{isExample(r) ? "Example app, bundled with JReverse" : sub(r)}</span>
                 <span class="when">
                   {#if isLoading(r)}<i class="spin"></i>{:else if !isExample(r)}{fmtWhen(r.openedAt)}{/if}
                 </span>
@@ -282,6 +294,7 @@
                 {:else}
                   <div class="facts">
                     {kindLabel(r.kind)}{#if r.size > 1}, {fmtSize(r.size)}{/if}{#if r.classCount > 0}, {fmtN(r.classCount)} classes{/if}
+                    {#if r.name && !isExample(r)}<span class="dim"><code>{baseName(r.path)}</code> in {where(r)}</span>{/if}
                     {#if lastIn}<span class="was">You were in <code>{lastIn}</code></span>{/if}
                     {#if noteCount}<span class="dim">{noteCount} {noteCount === 1 ? "note" : "notes"}</span>{/if}
                   </div>
@@ -438,6 +451,23 @@
     display: grid;
     place-items: center;
     border-radius: 11px;
+  }
+  /* A launcher icon brings its own shape; an adaptive one is cropped to the
+     72 of its 108 units that launchers show. */
+  .ic.app {
+    position: relative;
+    overflow: hidden;
+  }
+  .ic.app img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .ic.adaptive img {
+    position: absolute;
+    inset: -25%;
+    width: 150%;
+    height: 150%;
   }
   .missing .ic {
     filter: grayscale(1);

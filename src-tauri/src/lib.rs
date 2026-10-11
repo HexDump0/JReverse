@@ -45,6 +45,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::open_file,
+            commands::warm_engine,
+            commands::app_identity,
             commands::list_classes,
             commands::decompile_class,
             commands::smali_class,

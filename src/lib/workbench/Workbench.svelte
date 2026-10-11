@@ -564,6 +564,7 @@
       section: "Classes",
       label: ws.className(c.id),
       sub: dotted(c.id.slice(0, Math.max(0, c.id.lastIndexOf("/")))),
+      library: ws.libraries.has(c.id),
       run: () => ws.openClass(c.id),
     }));
     if (doc && tab.kind === "class") {

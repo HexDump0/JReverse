@@ -11,11 +11,10 @@ done and add a `log.md` entry.
 
 - Check the redesign in the real Tauri window: dragging by the title bar (the drag regions moved
   into a three-column grid), the theme script in `app.html`, drop anywhere.
-- Real app identity on home rows and the Overview: launcher icon, app label, package + version
-  (`WhatsApp`, `com.whatsapp 2.24`). Needs the engine (or `peek.rs`) to read the manifest and icon
-  cheaply at peek time; the Overview already parses the manifest. Home now shows a kind icon instead.
-- Start the engine JVM while the home screen is up, so the first open is faster.
-- Palette: rank the app's own classes above library classes (typing "Rec" lists androidx first).
+- Real app identity on the Overview too (home rows have it since 2026-10-11): the engine's `identity`
+  has the label, version and icon; the Overview header still shows the file name.
+- Vector launcher icons (adaptive icons with a vector foreground) aren't drawn: convert the vector
+  drawable to SVG in the engine. Seen on `BG-Video-Recorder.apk`.
 - Open question for the owner: commit `design/` and `brand/`? They're in `.git/info/exclude`, so
   other clones and worktrees don't have the mockups.
 
