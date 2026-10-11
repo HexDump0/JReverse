@@ -227,7 +227,7 @@
   aria-label="Classes"
   tabindex="0"
   bind:this={list}
-  onscroll={() => (top = list.scrollTop)}
+  onscroll={() => Math.abs(list.scrollTop - top) > (OVERSCAN / 2) * ROW && (top = list.scrollTop)}
   {onkeydown}
 >
   <div class="sizer" style:height="{rows.length * ROW + 12}px">

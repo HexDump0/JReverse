@@ -22,6 +22,9 @@ What was done. What's left. Anything the next agent must know.
   transform/opacity: the view switch has equal halves and its highlight translates; tabs no longer
   animate width. Tabs keep one width active or not (a faint close button on every tab), so switching
   never shifts the row.
+- Owner: scrolling laggy. Measured in real WebKitGTK: everything that repaints was capped at 60 fps by
+  the DMA-BUF renderer; `main.rs` now disables it on Linux (gotchas). Code view and class tree redraw
+  rows only after half the overscan: code view scroll 60 -> ~160 fps on the 180 Hz screen.
 - Checked with a real-engine bridge in headless Chromium (sampled timings, no console errors). Not yet
   looked at by the owner in the Tauri window. `pnpm check` clean, Vitest 35 pass.
 

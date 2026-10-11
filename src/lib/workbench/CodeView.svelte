@@ -275,8 +275,11 @@
   });
 
   function onscroll() {
-    top = scroller.scrollTop;
-    onscrolled?.(top);
+    const t = scroller.scrollTop;
+    // Lines are drawn OVERSCAN past each edge. Redraw only once the view has used up
+    // half of that, so most scroll frames touch no DOM at all.
+    if (Math.abs(t - top) > (OVERSCAN / 2) * lh) top = t;
+    onscrolled?.(t);
   }
 
   /* ---------- caret ---------- */

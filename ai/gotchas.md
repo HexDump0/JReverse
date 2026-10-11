@@ -46,6 +46,13 @@ Things that look wrong, break silently or have already wasted time. Add to this.
 
 ## Frontend
 
+- **WebKitGTK's DMA-BUF renderer caps drawing at 60 fps** (2.52, Wayland, AMD, 2026-10-11): rAF runs at
+  the screen's rate while idle, but any frame that changes pixels takes 16.7 ms. `main.rs` sets
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` on Linux unless already set; scrolling went from 60 to ~160 fps on
+  a 180 Hz screen. Headless Chromium can't show this: measure in real WebKitGTK (Testing, below).
+- Virtualized lists (code view, class tree) redraw their rows only after scrolling half the overscan,
+  not on every scroll event; with that, scrolling costs about as much as a static page.
+
 - `app.css` defines global classes: `.island .ph .ib .field .btn .k .key .spin` and the syntax
   classes `.tk .tt .tm .tf .tv .tp .ts .tn .tc .ta`. A component class with one of these names
   picks up the global style too (a status bar button named `.btn` turned into a bordered button).
@@ -85,6 +92,11 @@ Things that look wrong, break silently or have already wasted time. Add to this.
   Call `Page.enable` first, or the script isn't injected and the page is blank (`getCurrentWindow`
   throws). `currentWebview` needs `windowLabel` as well as `label`. The owner's `.env` has
   `VITE_FIRST_RUN=1`; start with `VITE_FIRST_RUN=0 pnpm dev` to see recent files.
+
+- Real WebKitGTK without Tauri: Python `gi` with `WebKit2` 4.1 (installed) opens a WebView on the dev
+  server; inject the `__TAURI_INTERNALS__` shim with a `UserScript` and point `invoke` at the Node
+  bridge; read results back with `evaluate_javascript`. Use it for frame-rate questions (rAF timings
+  while scrolling `[aria-label="Source"]`). It opens a window on the owner's screen for a few seconds.
 
 - Gradle caches test results. `pnpm engine:test` can print UP-TO-DATE without
   running anything. Use `cd engine && ./gradlew test smokeTest --rerun-tasks`
