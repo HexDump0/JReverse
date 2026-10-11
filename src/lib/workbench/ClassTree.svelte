@@ -248,7 +248,7 @@
           onkeydown={() => {}}
         >
           {#each guides(r.depth) as x (x)}<span class="gd" style:left="{x}px"></span>{/each}
-          <span class="tw"><Icon name={r.open ? "chevronDown" : "chevronRight"} size={13} /></span>
+          <span class="tw" class:open={r.open}><Icon name="chevronRight" size={13} /></span>
           <span class="label">{r.pkg.label}</span>
           {#if r.pkg.obf}<span class="obf" title="Most names in this package are obfuscated"><i></i>obfuscated</span>{/if}
           <span class="n">{fmtN(r.pkg.total)}</span>
@@ -295,7 +295,7 @@
         >
           {#if !matches}
             {#each guides(r.depth) as x (x)}<span class="gd" style:left="{x}px"></span>{/each}
-            <span class="tw">{#if hasMembers}<Icon name={membersShut ? "chevronRight" : "chevronDown"} size={13} />{/if}</span>
+            <span class="tw" class:open={!membersShut}>{#if hasMembers}<Icon name="chevronRight" size={13} />{/if}</span>
           {/if}
           <span class="k {KIND_CLASS[r.cls.kind]}">{KIND_LETTER[r.cls.kind]}</span>
           <span class="label" class:renamed>{ws.className(r.cls.id)}</span>
@@ -363,6 +363,13 @@
     place-items: center;
     margin-right: -3px;
     color: var(--text-3);
+  }
+  /* One chevron that turns, rather than two icons swapped. */
+  .tw > :global(svg) {
+    transition: transform var(--t) var(--ease);
+  }
+  .tw.open > :global(svg) {
+    transform: rotate(90deg);
   }
   .label {
     overflow: hidden;

@@ -16,6 +16,8 @@
 
 <script lang="ts">
   // A one-field dialog where the palette sits: rename, comment, go to line.
+  import { pop } from "$lib/motion.svelte";
+
   let { req, onclose }: { req: PromptRequest; onclose: () => void } = $props();
 
   let value = $state("");
@@ -55,7 +57,7 @@
 
 <svelte:window onmousedown={(e) => !(e.target as Element).closest(".prompt") && onclose()} />
 
-<div class="prompt" role="dialog" aria-label={req.title}>
+<div class="prompt" role="dialog" aria-label={req.title} in:pop out:pop>
   <div class="title">{req.title}</div>
   {#if req.multiline}
     <textarea bind:this={field} bind:value {onkeydown} placeholder={req.placeholder} rows="3" spellcheck="true"></textarea>

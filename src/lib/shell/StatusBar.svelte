@@ -2,6 +2,7 @@
   import type { EngineStatus } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
   import { status } from "$lib/status.svelte";
+  import { rise } from "$lib/motion.svelte";
 
   let {
     engine,
@@ -47,7 +48,7 @@
     {#if state.tone === "busy"}<i class="spin"></i>{:else}<i class="dot {state.tone}"></i>{/if}{state.text}
   </span>
   {#if info}<span class="it">{info}</span>{/if}
-  <span class="msg" class:err={status.error}>{status.message}</span>
+  <span class="msg" class:err={status.error}>{#key status.message}{#if status.message}<span in:rise>{status.message}</span>{/if}{/key}</span>
   {#if status.task}
     <span class="it task"><i class="spin"></i><span>{status.task}</span></span>
   {/if}
@@ -104,6 +105,15 @@
   }
   .msg.err {
     color: var(--bad);
+  }
+  /* Inline-block so the message can rise into place. */
+  .msg > span {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: top;
   }
   .task {
     color: var(--text-2);

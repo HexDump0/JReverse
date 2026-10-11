@@ -8,6 +8,8 @@
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { cancelJob, errorMessage, exportSources, isFileHit, isNameHit, onEngineProgress, readMappings, writeMappings, writeTextFile, type MappingFormat, type NodeInfo, type SearchHit, type Usage } from "$lib/engine";
   import Icon from "$lib/Icon.svelte";
+  import { flip } from "svelte/animate";
+  import { fadeIn, glide } from "$lib/motion.svelte";
   import { fmtN, fmtSize } from "$lib/format";
   import { say, setTask } from "$lib/status.svelte";
   import type { Location, Menu, MenuItem } from "$lib/shell/AppBar.svelte";
@@ -755,6 +757,9 @@
             class="tab"
             class:on={t.key === ws.activeKey}
             class:pin={t.kind === "overview"}
+            in:fadeIn
+            out:fadeIn
+            animate:flip={glide}
             role="tab"
             tabindex="-1"
             aria-selected={t.key === ws.activeKey}
@@ -778,6 +783,7 @@
       {#if tab.kind === "class"}
         <div class="views">
           <div class="seg" role="radiogroup" aria-label="View">
+            <i class="thumb"></i>
             <button role="radio" aria-checked={tab.view !== "smali"} class:on={tab.view !== "smali"} onclick={() => tab.view === "smali" && ws.setView("java")}>Java</button>
             <button role="radio" aria-checked={tab.view === "smali"} class:on={tab.view === "smali"} onclick={() => ws.setView("smali")}>{lowView.label}</button>
           </div>
@@ -964,7 +970,7 @@
     flex: none;
     max-width: 230px;
     height: 36px;
-    padding: 0 14px;
+    padding: 0 8px 0 14px;
     border-radius: 9px 9px 0 0;
     color: var(--text-2);
     cursor: pointer;
@@ -975,7 +981,6 @@
     background: var(--tab-hover);
   }
   .tab.on {
-    padding-right: 6px;
     background: var(--editor);
     color: var(--text-hi);
   }
@@ -992,29 +997,24 @@
     font-size: 12px;
     color: var(--text-3);
   }
-  /* Only the active tab keeps room for its close button. On the others it shows over
-     the end of the label on hover, so the gaps between tabs stay even. */
+  /* Every tab shows its close button, faint until hovered or active, so a tab is the
+     same width active or not and switching never shifts the row. */
   .tx {
     display: grid;
     place-items: center;
     width: 20px;
     height: 20px;
+    margin-left: -2px;
     border-radius: 5px;
     color: var(--text-3);
-    visibility: hidden;
-  }
-  .tab:not(.on) .tx {
-    position: absolute;
-    right: 5px;
-    background: var(--tab-hover);
-    box-shadow: -6px 0 6px var(--tab-hover);
+    opacity: 0.45;
+    transition: opacity var(--t-fast) var(--ease);
   }
   .tab:hover .tx,
   .tab.on .tx {
-    visibility: visible;
+    opacity: 1;
   }
-  .tx:hover,
-  .tab:not(.on) .tx:hover {
+  .tx:hover {
     background: var(--hover);
     color: var(--text-hi);
   }
@@ -1025,22 +1025,39 @@
     gap: 6px;
     flex: none;
   }
+  /* Equal halves, so the highlight only has to slide (a transform the GPU runs),
+     never change width. */
   .seg {
-    display: flex;
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     padding: 3px;
     border-radius: 9px;
     background: var(--frame);
   }
   .seg button {
+    position: relative;
     padding: 3px 11px;
     border-radius: 6px;
     color: var(--text-3);
+  }
+  .thumb {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(50% - 3px);
+    border-radius: 6px;
+    background: var(--raised);
+    transition: transform var(--t) var(--ease);
+  }
+  .seg:has(button:nth-of-type(2).on) .thumb {
+    transform: translateX(100%);
   }
   .seg button:hover {
     color: var(--text);
   }
   .seg button.on {
-    background: var(--raised);
     color: var(--text-hi);
   }
   .pick {

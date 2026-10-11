@@ -44,8 +44,14 @@ Icons: use Tabler icons (tabler.io/icons, outline set) as inline SVG. No Unicode
 icons or separators (no arrows, middle dots, ellipses or curly quotes in UI text).
 Gradients: keep them rare. The beam and the selection ray fade out because that is the light
 effect itself. Use flat colours for everything else (no radial glows on selected items).
-Motion: none. The owner rejected a subtle GSAP pass (intro, light pulses, gliding ray) and wants no
-animation. Only functional progress indicators (spinner, loading progress) move.
+Motion: feedback only (owner, 2026-10-11). On 2026-10-01 the owner rejected decorative motion (a GSAP
+intro, light pulses, a gliding ray). On 2026-10-11 they asked for subtle "Apple-like" motion on the small
+stuff: things move only in answer to something you did, 100-180 ms, ease-out, never on load or in a loop.
+All of it lives in `src/lib/motion.svelte.ts` (Svelte transitions) and the motion block in `app.css`;
+View > Motion turns it off (`data-motion="off"` on `<html>`), and so does reduced motion. List rows and
+menu items stay instant so a held arrow key leaves no trail. Animate only transform and opacity: width,
+height or left/top re-layout on WebKitGTK's main thread every frame and look choppy on the owner's 180 Hz
+screen. Don't animate the caret, typing, or a highlight on the line a jump lands on (owner disliked it).
 `design/start-mockup.html` was approved for the start screen on 2026-10-01. On 2026-10-05 the owner
 said the built home screen "doesn't look good at all", so it is no longer the target. Keep the
 rules above. Treat the layout itself as open.
@@ -65,7 +71,10 @@ feature lists, no text that isn't needed. Don't scan the user's disk.
   renames, bookmarks) use `--ink`; the accent stays "where you are"; syntax never uses either.
 - Kind badges: classes in a rounded square, members in a circle (`.k .k-c`, `.k-m`, ...).
 - Fonts: Geist (UI), JetBrains Mono (code). No serif: the owner rejected a serif italic for notes.
-- Still: no stripes, no motion except spinners and progress, Tabler icons only, no filler copy.
+- Still: no stripes, motion only as feedback (above), Tabler icons only, no filler copy.
+- Tabs (2026-10-11, "attached", from `design/tabs-options.html`): the active tab is the editor's surface
+  with rounded top corners and no outline; badges only for kinds other than a plain class; Overview is a
+  pinned icon. The owner dislikes thin outline borders on the left and right of selected items.
 
 ## Commands
 

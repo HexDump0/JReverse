@@ -9,6 +9,22 @@ What was done. What's left. Anything the next agent must know.
 
 ---
 
+## 2026-10-11 — claude-t7b — attached tabs, motion pass
+- Tabs: owner disliked the floating outlined pill, the badge on every tab and the thin side borders.
+  Picked "A Attached" from `design/tabs-options.html` (local); built in `Workbench.svelte`. The Java /
+  Bytecode switch lost its outline too and its highlight now slides.
+- Motion (owner asked, reversing the 2026-10-01 "no animation"): `src/lib/motion.svelte.ts` + `app.css`.
+  Menus drop in, palette/prompt/F1 sheet pop, tabs fade and the others glide (`animate:flip`), status
+  messages rise, drop overlay fades, chevrons rotate, hover colours fade, primary buttons dip on press.
+  View > Motion turns it off. Rules in conventions.md.
+- Owner then: removed the "landed line" flash (disliked); said motion felt frame-limited. WebKitGTK isn't
+  capped (measured 100 fps on the 100 Hz screen; main screen is 180 Hz), so everything now animates only
+  transform/opacity: the view switch has equal halves and its highlight translates; tabs no longer
+  animate width. Tabs keep one width active or not (a faint close button on every tab), so switching
+  never shifts the row.
+- Checked with a real-engine bridge in headless Chromium (sampled timings, no console errors). Not yet
+  looked at by the owner in the Tauri window. `pnpm check` clean, Vitest 35 pass.
+
 ## 2026-10-11 — claude-r4n — warm-up, palette ranking, app identity on home
 - Engine `warm` (opens one of its own classes) called from `+page.svelte` on mount: first open of a
   3.7k-class APK 2.4 s to ~2.0 s. Starting the JVM alone saves only 0.1 s; loading jadx is the cost.

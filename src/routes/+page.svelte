@@ -28,6 +28,7 @@
   import { fmtN } from "$lib/format";
   import { say, setTask } from "$lib/status.svelte";
   import { setTheme, theme, THEMES } from "$lib/theme.svelte";
+  import { fadeIn, motion, setMotion } from "$lib/motion.svelte";
   import AppBar, { type Menu, type MenuItem } from "$lib/shell/AppBar.svelte";
   import StatusBar from "$lib/shell/StatusBar.svelte";
   import Palette, { type PaletteItem } from "$lib/shell/Palette.svelte";
@@ -213,7 +214,12 @@
       { label: logOpen ? "Hide log" : "Show log", run: () => (logOpen = !logOpen) },
       "-",
     ];
-    const themes: (MenuItem | "-")[] = ["-", ...THEMES.map((t) => ({ label: `${t.label} theme`, checked: theme.id === t.id, run: () => setTheme(t.id) }))];
+    const themes: (MenuItem | "-")[] = [
+      "-",
+      ...THEMES.map((t) => ({ label: `${t.label} theme`, checked: theme.id === t.id, run: () => setTheme(t.id) })),
+      "-",
+      { label: "Motion", checked: motion.on, run: () => setMotion(!motion.on) },
+    ];
     if (ws && workbench) {
       const more = workbench.menus();
       const view = more.find((m) => m.label === "View");
@@ -244,6 +250,7 @@
     act("Keyboard shortcuts", "F1", () => (shortcutsOpen = true));
     act(logOpen ? "Hide log" : "Show log", "", () => (logOpen = !logOpen));
     for (const t of THEMES) if (t.id !== theme.id) act(`${t.label} theme`, "", () => setTheme(t.id));
+    act(motion.on ? "Turn motion off" : "Turn motion on", "", () => setMotion(!motion.on));
     return items;
   });
 
@@ -349,7 +356,7 @@
 </div>
 
 {#if drag && !onboarding}
-  <div class="drop" aria-hidden="true">
+  <div class="drop" aria-hidden="true" in:fadeIn out:fadeIn>
     <div>
       <h2>Drop to open</h2>
       <p>APK, AAB, AAR, JAR, WAR, DEX or a class file{ws ? `. ${ws.name} is saved and closed first.` : ""}</p>

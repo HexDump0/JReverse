@@ -44,6 +44,7 @@
 
 <script lang="ts">
   import { tick } from "svelte";
+  import { pop } from "$lib/motion.svelte";
 
   const MAX_SHOWN = 200;
 
@@ -111,7 +112,7 @@
 
 <svelte:window onmousedown={(e) => !(e.target as Element).closest(".pal") && onclose()} />
 
-<div class="pal" role="dialog" aria-label="Go to anything">
+<div class="pal" role="dialog" aria-label="Go to anything" in:pop out:pop>
   <input
     bind:this={input}
     bind:value={query}

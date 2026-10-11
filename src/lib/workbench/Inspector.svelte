@@ -214,7 +214,7 @@
         <div class="sh">
           {#if multiline}
             <button class="fold" aria-expanded={showSnippet} onclick={() => ((showSnippet = !showSnippet), remember())}>
-              <Icon name={showSnippet ? "chevronDown" : "chevronRight"} size={14} /><h3>Copy as</h3>
+              <Icon name="chevronRight" size={14} /><h3>Copy as</h3>
             </button>
           {:else}
             <h3>Copy as</h3>
@@ -456,5 +456,12 @@
     color: var(--text);
     white-space: pre;
     overflow: auto;
+  }
+
+  .fold > :global(svg) {
+    transition: transform var(--t) var(--ease);
+  }
+  .fold[aria-expanded="true"] > :global(svg) {
+    transform: rotate(90deg);
   }
 </style>

@@ -24,6 +24,7 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import Icon from "$lib/Icon.svelte";
+  import { drop } from "$lib/motion.svelte";
 
   let {
     menus,
@@ -92,7 +93,7 @@
               aria-expanded={openMenu === menu.label}>{menu.label}</button
             >
             {#if openMenu === menu.label}
-              <div class="drop" role="menu">
+              <div class="drop" role="menu" in:drop>
                 {#each menu.items as item, i (item === "-" ? `-${i}` : item.label)}
                   {#if item === "-"}
                     <hr />

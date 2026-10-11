@@ -1,5 +1,7 @@
 <script lang="ts">
   // Every keyboard shortcut, on F1. Keys follow jadx-gui where it has one.
+  import { pop } from "$lib/motion.svelte";
+
   let { onclose }: { onclose: () => void } = $props();
 
   const GROUPS: { title: string; keys: [string[], string][] }[] = [
@@ -49,7 +51,7 @@
 
 <svelte:window onkeydowncapture={onkeydown} onmousedown={(e) => !(e.target as Element).closest(".sheet") && onclose()} />
 
-<div class="sheet" role="dialog" aria-label="Keyboard shortcuts">
+<div class="sheet" role="dialog" aria-label="Keyboard shortcuts" in:pop out:pop>
   <h2>Keyboard shortcuts</h2>
   <div class="cols">
     {#each GROUPS as g (g.title)}

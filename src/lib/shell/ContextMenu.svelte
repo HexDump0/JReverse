@@ -2,6 +2,7 @@
   // A right-click menu at the pointer, styled like the app bar's menus.
   import { tick } from "svelte";
   import Icon from "$lib/Icon.svelte";
+  import { drop } from "$lib/motion.svelte";
   import type { MenuItem } from "./AppBar.svelte";
 
   let { x, y, items, onclose }: { x: number; y: number; items: (MenuItem | "-")[]; onclose: () => void } = $props();
@@ -39,7 +40,7 @@
 
 <svelte:window onmousedown={(e) => !el.contains(e.target as Node) && onclose()} onblur={onclose} />
 
-<div class="ctx" role="menu" tabindex="-1" bind:this={el} style:left="{pos.left}px" style:top="{pos.top}px" {onkeydown}>
+<div class="ctx" role="menu" tabindex="-1" bind:this={el} in:drop out:drop style:left="{pos.left}px" style:top="{pos.top}px" {onkeydown}>
   {#each items as item, i (i)}
     {#if item === "-"}
       <div class="sep"></div>

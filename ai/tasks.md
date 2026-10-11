@@ -6,10 +6,10 @@ done and add a `log.md` entry.
 
 ## In progress
 
-- [claude-t7b, 2026-10-11] tab bar redesign: options in `design/tabs-options.html`, then `Workbench.svelte` tabs
 
 ## Next (owner's plan for the next session)
 
+- Owner to judge the motion pass (View > Motion toggles it) and the attached tabs in the real window.
 - Check the redesign in the real Tauri window: dragging by the title bar (the drag regions moved
   into a three-column grid), the theme script in `app.html`, drop anywhere.
 - Real app identity on the Overview too (home rows have it since 2026-10-11): the engine's `identity`

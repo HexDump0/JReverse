@@ -67,7 +67,7 @@
     {#if r.type === "pkg"}
       <button class="row dir" style:padding-left="{8 + r.depth * 18}px" role="treeitem" aria-expanded={r.open} aria-selected="false" onclick={() => toggle(r.key)}>
         {#each Array.from({ length: r.depth }, (_, k) => 16 + k * 18) as x (x)}<span class="gd" style:left="{x}px"></span>{/each}
-        <span class="tw"><Icon name={r.open ? "chevronDown" : "chevronRight"} size={13} /></span>
+        <span class="tw" class:open={r.open}><Icon name="chevronRight" size={13} /></span>
         <span class="label">{r.pkg.label}</span>
         <span class="n">{fmtN(r.pkg.total)}</span>
       </button>
@@ -155,6 +155,13 @@
     place-items: center;
     margin-right: -3px;
     color: var(--text-3);
+  }
+  /* One chevron that turns, rather than two icons swapped. */
+  .tw > :global(svg) {
+    transition: transform var(--t) var(--ease);
+  }
+  .tw.open > :global(svg) {
+    transform: rotate(90deg);
   }
   .dir .label {
     color: var(--text);

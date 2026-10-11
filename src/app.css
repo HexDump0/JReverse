@@ -460,3 +460,34 @@ svg.ti {
     border-right-color: var(--accent);
   }
 }
+
+/* Motion (src/lib/motion.svelte.ts): controls fade between states instead of
+   snapping. Rows in lists and menus stay instant, so holding an arrow key never
+   leaves a trail. Zero specificity, so a component can still set its own. */
+:root {
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-fast: 110ms;
+  --t: 180ms;
+}
+:where(button, .tab):not(:where([role="menuitem"], [role="treeitem"], [role="option"], .pi, .hit, .use, .row)) {
+  transition:
+    background-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+:where(.btn.primary, .go):active:not(:disabled) {
+  transform: scale(0.97);
+}
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+  }
+}
